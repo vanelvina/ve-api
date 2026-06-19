@@ -1,3 +1,4 @@
+// Force nodemon reload to pick up new MONGODB_URI
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -40,8 +41,8 @@ if (!MONGODB_URI) {
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('MongoDB connected successfully.'))
   .catch(err => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
+    console.error('WARNING: MongoDB connection failed on startup. The API will start, but database operations will fail.');
+    console.error('Error detail:', err.message);
   });
 
 // Mount API Routes

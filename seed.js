@@ -27,7 +27,7 @@ if (!MONGODB_URI) {
 }
 
 // Path to data files in the frontend
-const frontendDataPath = path.join(__dirname, '../van-elvina/data');
+const frontendDataPath = path.join(__dirname, '../ve-app/data');
 
 const loadJSONFile = (filename) => {
   const filePath = path.join(frontendDataPath, filename);
@@ -108,31 +108,83 @@ async function seed() {
         subtitle: 'Promotional Carousel'
       },
       {
+        key: 'offers-grid',
+        name: 'Promo Cards Grid',
+        type: 'promo-grid',
+        enabled: true,
+        order: 2,
+        title: 'Today\'s Special Deals',
+        subtitle: 'Super Saver Offers',
+        description: 'Vibrant discount cards for category shoppers.',
+        items: [
+          { image: 'https://images.unsplash.com/photo-1616150638538-ffb0679a3fc4?w=600&q=80', link: '/products?category=bras', title: 'Buy 2 Get 1 Free on Bras' },
+          { image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80', link: '/products?category=panties', title: 'Flat 50% Off on Panties' },
+          { image: 'https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=600&q=80', link: '/products?category=activewear', title: 'New Activewear Sets' }
+        ]
+      },
+      {
+        key: 'categories',
+        name: 'Shop By Category Section',
+        type: 'system',
+        enabled: true,
+        order: 3,
+        title: 'Shop By Category',
+        subtitle: 'Find Your Style',
+        description: 'Explore our full range — from everyday essentials to special occasion pieces.'
+      },
+      {
         key: 'featured',
         name: 'Featured Products Section',
         type: 'system',
         enabled: true,
-        order: 2,
+        order: 4,
         title: 'Featured Products',
         subtitle: 'Handpicked For You',
         description: 'Our bestselling styles — tried, tested, and loved by thousands of women across India.'
+      },
+      {
+        key: 'curated-collections',
+        name: 'Curated Collection Tabs',
+        type: 'collection-tabs',
+        enabled: true,
+        order: 5,
+        title: 'Curated Lingerie Styles',
+        subtitle: 'Curated Categories',
+        description: 'Toggle through our most loved item configurations.',
+        items: ['Bras', 'Panties']
       },
       {
         key: 'new-arrivals',
         name: 'New Arrivals Section',
         type: 'system',
         enabled: true,
-        order: 3,
+        order: 6,
         title: 'New Arrivals',
         subtitle: 'Latest Styles',
         description: 'Fresh arrivals crafted from organic fabrics to match your vibes.'
+      },
+      {
+        key: 'right-size-finder',
+        name: 'Fit Code Sizing Calculator',
+        type: 'fit-calculator',
+        enabled: true,
+        order: 7,
+        title: 'Calculate Your Perfect Bra Fit',
+        subtitle: 'Find Your Fit Code',
+        description: '80% of women wear the wrong bra size. Take our 60-second sizing test to find your exact match and shop with confidence.',
+        image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=800&q=80',
+        items: {
+          image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=800&q=80',
+          btnText: 'Start Sizing Test',
+          btnLink: '#'
+        }
       },
       {
         key: 'everyday-comfort',
         name: 'Everyday Comfort Editorial',
         type: 'system',
         enabled: true,
-        order: 4,
+        order: 8,
         title: 'Everyday Comfort Collection',
         subtitle: 'Everyday Essentials',
         description: "Designed for real life — from morning rush to evening wind-down. Our Everyday Comfort Collection features ultra-soft fabrics, thoughtful fits, and styles that move with you. Because comfort isn't a luxury. It's a daily right.",
@@ -146,31 +198,36 @@ async function seed() {
         ]
       },
       {
+        key: 'deal-promos',
+        name: 'Special Packs & Offers',
+        type: 'offers-slider',
+        enabled: true,
+        order: 9,
+        title: 'Bestselling Super Saver Combos',
+        subtitle: 'Value Packs & Deals',
+        description: 'Shop curated value sets for maximum comfort and affordability.',
+        items: [
+          { image: 'https://images.unsplash.com/photo-1582562124811-c09040d0a901?w=400&q=80', title: 'Everyday Cotton Pack', subtitle: 'Pack of 3 Everyday Comfort Bras', price: '₹799', link: '/products/cotton-full-coverage-bra' },
+          { image: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=400&q=80', title: 'Lace Elegance Set', subtitle: 'Lace Padded non-wired bra', price: '₹699', link: '/products/lycra-padded-bra' },
+          { image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=400&q=80', title: 'Seamless Hipsters Pack', subtitle: 'Pack of 3 Seamless Panties', price: '₹599', link: '/products/seamless-panties' }
+        ]
+      },
+      {
         key: 'best-sellers',
         name: 'Best Sellers Section',
         type: 'system',
         enabled: true,
-        order: 5,
+        order: 10,
         title: 'Best Sellers',
         subtitle: 'Customer Favorites',
         description: 'Shop the pieces that everyone is talking about.'
-      },
-      {
-        key: 'categories',
-        name: 'Shop By Category Section',
-        type: 'system',
-        enabled: true,
-        order: 6,
-        title: 'Shop By Category',
-        subtitle: 'Find Your Style',
-        description: 'Explore our full range — from everyday essentials to special occasion pieces.'
       },
       {
         key: 'reviews',
         name: 'Customer Reviews Section',
         type: 'system',
         enabled: true,
-        order: 7,
+        order: 11,
         title: 'What Our Customers Say',
         subtitle: 'Real Women, Real Stories',
         description: 'Join 50,000+ happy customers who trust Van Elvina for everyday comfort.'
@@ -180,7 +237,7 @@ async function seed() {
         name: 'Brand USP Promise Section',
         type: 'system',
         enabled: true,
-        order: 8,
+        order: 12,
         title: 'The Van Elvina Promise',
         subtitle: 'Why Choose Van Elvina',
         description: 'We believe every woman deserves innerwear that\'s as beautiful as it is comfortable.',
