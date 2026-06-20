@@ -288,11 +288,21 @@ async function seed() {
         description: 'Shop the pieces that everyone is talking about.'
       },
       {
+        key: 'trending-now',
+        name: 'Trending Now Section',
+        type: 'system',
+        enabled: true,
+        order: 15,
+        title: 'Trending Now',
+        subtitle: 'Hot Styles',
+        description: 'Shop the trending styles that are hot right now.'
+      },
+      {
         key: 'reviews',
         name: 'Customer Reviews Section',
         type: 'system',
         enabled: true,
-        order: 15,
+        order: 16,
         title: 'What Our Customers Say',
         subtitle: 'Real Women, Real Stories',
         description: 'Join 50,000+ happy customers who trust Van Elvina for everyday comfort.'
@@ -302,7 +312,7 @@ async function seed() {
         name: 'Brand USP Promise Section',
         type: 'system',
         enabled: true,
-        order: 16,
+        order: 17,
         title: 'The Van Elvina Promise',
         subtitle: 'Why Choose Van Elvina',
         description: 'We believe every woman deserves innerwear that\'s as beautiful as it is comfortable.',
