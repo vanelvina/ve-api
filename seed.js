@@ -108,18 +108,66 @@ async function seed() {
         subtitle: 'Promotional Carousel'
       },
       {
+        key: 'countdown-sale',
+        name: 'Limited Time Countdown Banner',
+        type: 'countdown-banner',
+        enabled: true,
+        order: 2,
+        title: 'SOS Sale is Live',
+        image: 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=1400&q=80',
+        imageMobile: 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=800&q=80',
+        items: {
+          link: '/products?badge=sale',
+          endDate: '2026-07-25T23:59:59'
+        }
+      },
+      {
+        key: 'banger-deals',
+        name: 'Banger Deals Carousel',
+        type: 'vertical-carousel',
+        enabled: true,
+        order: 3,
+        title: 'The fashion champions are here at BANGER DEALS',
+        subtitle: 'Banger Deals',
+        items: {
+          interval: 3,
+          list: [
+            { image: 'https://images.unsplash.com/photo-1616150638538-ffb0679a3fc4?w=400&q=80', imageMobile: 'https://images.unsplash.com/photo-1616150638538-ffb0679a3fc4?w=300&q=80', link: '/products?category=activewear' },
+            { image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400&q=80', imageMobile: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=300&q=80', link: '/products?category=panties' },
+            { image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=400&q=80', imageMobile: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=300&q=80', link: '/products?category=shapewear' },
+            { image: 'https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=400&q=80', imageMobile: 'https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=300&q=80', link: '/products' },
+            { image: 'https://images.unsplash.com/photo-1582562124811-c09040d0a901?w=400&q=80', imageMobile: 'https://images.unsplash.com/photo-1582562124811-c09040d0a901?w=300&q=80', link: '/products?category=bras' },
+            { image: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=400&q=80', imageMobile: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=300&q=80', link: '/products?category=sleepwear' }
+          ]
+        }
+      },
+      {
+        key: 'top-picks-banner',
+        name: 'Top Picks Promo Banner',
+        type: 'image-only',
+        enabled: true,
+        order: 4,
+        title: '',
+        subtitle: '',
+        image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=1400&q=80',
+        imageMobile: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=800&q=80',
+        items: {
+          link: '/products?badge=sale'
+        }
+      },
+      {
         key: 'offers-grid',
         name: 'Promo Cards Grid',
         type: 'promo-grid',
         enabled: true,
-        order: 2,
+        order: 5,
         title: 'Today\'s Special Deals',
         subtitle: 'Super Saver Offers',
         description: 'Vibrant discount cards for category shoppers.',
         items: [
-          { image: 'https://images.unsplash.com/photo-1616150638538-ffb0679a3fc4?w=600&q=80', link: '/products?category=bras', title: 'Buy 2 Get 1 Free on Bras' },
-          { image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80', link: '/products?category=panties', title: 'Flat 50% Off on Panties' },
-          { image: 'https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=600&q=80', link: '/products?category=activewear', title: 'New Activewear Sets' }
+          { image: 'https://images.unsplash.com/photo-1616150638538-ffb0679a3fc4?w=600&q=80', imageMobile: 'https://images.unsplash.com/photo-1616150638538-ffb0679a3fc4?w=400&q=80', link: '/products?category=bras', title: 'Buy 2 Get 1 Free on Bras' },
+          { image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80', imageMobile: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400&q=80', link: '/products?category=panties', title: 'Flat 50% Off on Panties' },
+          { image: 'https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=600&q=80', imageMobile: 'https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=400&q=80', link: '/products?category=activewear', title: 'New Activewear Sets' }
         ]
       },
       {
@@ -127,7 +175,7 @@ async function seed() {
         name: 'Shop By Category Section',
         type: 'system',
         enabled: true,
-        order: 3,
+        order: 6,
         title: 'Shop By Category',
         subtitle: 'Find Your Style',
         description: 'Explore our full range — from everyday essentials to special occasion pieces.'
@@ -137,7 +185,7 @@ async function seed() {
         name: 'Featured Products Section',
         type: 'system',
         enabled: true,
-        order: 4,
+        order: 7,
         title: 'Featured Products',
         subtitle: 'Handpicked For You',
         description: 'Our bestselling styles — tried, tested, and loved by thousands of women across India.'
@@ -147,7 +195,7 @@ async function seed() {
         name: 'Curated Collection Tabs',
         type: 'collection-tabs',
         enabled: true,
-        order: 5,
+        order: 8,
         title: 'Curated Lingerie Styles',
         subtitle: 'Curated Categories',
         description: 'Toggle through our most loved item configurations.',
@@ -158,7 +206,7 @@ async function seed() {
         name: 'New Arrivals Section',
         type: 'system',
         enabled: true,
-        order: 6,
+        order: 9,
         title: 'New Arrivals',
         subtitle: 'Latest Styles',
         description: 'Fresh arrivals crafted from organic fabrics to match your vibes.'
@@ -168,15 +216,31 @@ async function seed() {
         name: 'Fit Code Sizing Calculator',
         type: 'fit-calculator',
         enabled: true,
-        order: 7,
+        order: 10,
         title: 'Calculate Your Perfect Bra Fit',
         subtitle: 'Find Your Fit Code',
         description: '80% of women wear the wrong bra size. Take our 60-second sizing test to find your exact match and shop with confidence.',
         image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=800&q=80',
+        imageMobile: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=500&q=80',
         items: {
           image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=800&q=80',
+          imageMobile: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=500&q=80',
           btnText: 'Start Sizing Test',
           btnLink: '#'
+        }
+      },
+      {
+        key: 'activewear-promo-gif',
+        name: 'Activewear Promo GIF',
+        type: 'image-only',
+        enabled: true,
+        order: 11,
+        title: '',
+        subtitle: '',
+        image: 'https://cdn.zivame.com/media/v3/Desk_block-layout_activewear.gif',
+        imageMobile: 'https://cdn.zivame.com/media/v3/Desk_block-layout_activewear.gif',
+        items: {
+          link: '/products?category=activewear'
         }
       },
       {
@@ -184,11 +248,12 @@ async function seed() {
         name: 'Everyday Comfort Editorial',
         type: 'system',
         enabled: true,
-        order: 8,
+        order: 12,
         title: 'Everyday Comfort Collection',
         subtitle: 'Everyday Essentials',
         description: "Designed for real life — from morning rush to evening wind-down. Our Everyday Comfort Collection features ultra-soft fabrics, thoughtful fits, and styles that move with you. Because comfort isn't a luxury. It's a daily right.",
         image: 'https://images.unsplash.com/photo-1581044777550-4cfa60707c03?w=800&q=80',
+        imageMobile: 'https://images.unsplash.com/photo-1581044777550-4cfa60707c03?w=500&q=80',
         items: [
           'All-day comfort without compromise',
           'Premium breathable fabrics',
@@ -202,14 +267,14 @@ async function seed() {
         name: 'Special Packs & Offers',
         type: 'offers-slider',
         enabled: true,
-        order: 9,
+        order: 13,
         title: 'Bestselling Super Saver Combos',
         subtitle: 'Value Packs & Deals',
         description: 'Shop curated value sets for maximum comfort and affordability.',
         items: [
-          { image: 'https://images.unsplash.com/photo-1582562124811-c09040d0a901?w=400&q=80', title: 'Everyday Cotton Pack', subtitle: 'Pack of 3 Everyday Comfort Bras', price: '₹799', link: '/products/cotton-full-coverage-bra' },
-          { image: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=400&q=80', title: 'Lace Elegance Set', subtitle: 'Lace Padded non-wired bra', price: '₹699', link: '/products/lycra-padded-bra' },
-          { image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=400&q=80', title: 'Seamless Hipsters Pack', subtitle: 'Pack of 3 Seamless Panties', price: '₹599', link: '/products/seamless-panties' }
+          { image: 'https://images.unsplash.com/photo-1582562124811-c09040d0a901?w=400&q=80', imageMobile: 'https://images.unsplash.com/photo-1582562124811-c09040d0a901?w=300&q=80', title: 'Everyday Cotton Pack', subtitle: 'Pack of 3 Everyday Comfort Bras', price: '₹799', link: '/products/cotton-full-coverage-bra' },
+          { image: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=400&q=80', imageMobile: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=300&q=80', title: 'Lace Elegance Set', subtitle: 'Lace Padded non-wired bra', price: '₹699', link: '/products/lycra-padded-bra' },
+          { image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=400&q=80', imageMobile: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=300&q=80', title: 'Seamless Hipsters Pack', subtitle: 'Pack of 3 Seamless Panties', price: '₹599', link: '/products/seamless-panties' }
         ]
       },
       {
@@ -217,7 +282,7 @@ async function seed() {
         name: 'Best Sellers Section',
         type: 'system',
         enabled: true,
-        order: 10,
+        order: 14,
         title: 'Best Sellers',
         subtitle: 'Customer Favorites',
         description: 'Shop the pieces that everyone is talking about.'
@@ -227,7 +292,7 @@ async function seed() {
         name: 'Customer Reviews Section',
         type: 'system',
         enabled: true,
-        order: 11,
+        order: 15,
         title: 'What Our Customers Say',
         subtitle: 'Real Women, Real Stories',
         description: 'Join 50,000+ happy customers who trust Van Elvina for everyday comfort.'
@@ -237,7 +302,7 @@ async function seed() {
         name: 'Brand USP Promise Section',
         type: 'system',
         enabled: true,
-        order: 12,
+        order: 16,
         title: 'The Van Elvina Promise',
         subtitle: 'Why Choose Van Elvina',
         description: 'We believe every woman deserves innerwear that\'s as beautiful as it is comfortable.',
