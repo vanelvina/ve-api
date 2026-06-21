@@ -3,7 +3,8 @@ import mongoose from 'mongoose';
 const widgetSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true },
   name: { type: String, required: true },
-  type: { type: String, enum: ['system', 'banner', 'editorial', 'html', 'promo-grid', 'collection-tabs', 'fit-calculator', 'offers-slider', 'countdown-banner', 'image-only', 'vertical-carousel', 'heading-banner', 'flexible-grid', '3-set-carousel', 'square-grid', 'shoppers-talk'], default: 'system' },
+  device: { type: String, enum: ['desktop', 'mobile'], default: 'desktop' },
+  type: { type: String, enum: ['system', 'banner', 'editorial', 'html', 'promo-grid', 'collection-tabs', 'fit-calculator', 'offers-slider', 'countdown-banner', 'image-only', 'vertical-carousel', 'heading-banner', 'flexible-grid', '3-set-carousel', 'square-grid', 'shoppers-talk', 'mobile-category-list'], default: 'system' },
   enabled: { type: Boolean, default: true },
   order: { type: Number, default: 0 },
   title: { type: String },
