@@ -97,7 +97,7 @@ async function seed() {
 
     // Seed Widgets
     console.log('Seeding widgets layout configurations...');
-    const widgets = [
+    const baseWidgets = [
       {
         key: 'hero',
         name: 'Hero Banners Carousel',
@@ -326,6 +326,41 @@ async function seed() {
         ]
       }
     ];
+
+    const widgets = [];
+    for (const w of baseWidgets) {
+      widgets.push({
+        ...w,
+        device: 'desktop'
+      });
+      
+      const mobileItems = w.items ? JSON.parse(JSON.stringify(w.items)) : undefined;
+      if (mobileItems) {
+        if (w.type === 'fit-calculator') {
+          mobileItems.image = mobileItems.imageMobile || mobileItems.image;
+        } else if (w.type === 'promo-grid' || w.type === 'offers-slider') {
+          if (Array.isArray(mobileItems)) {
+            mobileItems.forEach(item => {
+              if (item) item.image = item.imageMobile || item.image;
+            });
+          }
+        } else if ((w.type === 'vertical-carousel' || w.type === '3-set-carousel') && mobileItems.list) {
+          mobileItems.list.forEach(item => {
+            if (item) item.image = item.imageMobile || item.image;
+          });
+        }
+      }
+
+      widgets.push({
+        ...w,
+        key: `${w.key}-mobile`,
+        name: `${w.name} (Mobile)`,
+        device: 'mobile',
+        image: w.imageMobile || w.image,
+        imageMobile: w.imageMobile || w.image,
+        items: mobileItems
+      });
+    }
 
     await Widget.insertMany(widgets);
     console.log(`Seeded ${widgets.length} homepage widgets layout.`);
