@@ -28,7 +28,22 @@ const productSchema = new mongoose.Schema({
   inStock: { type: Boolean, default: true },
   stockCount: { type: Number, default: 0 },
   sku: { type: String },
-  deliveryDays: { type: Number, default: 3 }
+  styleId: { type: String },
+  deliveryDays: { type: Number, default: 3 },
+  images: [{ type: String }],
+  videoUrl: { type: String },
+  availableOffer: { type: String },
+  features: [{ type: String }],
+  additionalInfo: { type: String },
+  descriptiveImages: [{ type: String }],
+  faqs: [{
+    question: { type: String },
+    answer: { type: String }
+  }],
+  isCodAvailable: { type: Boolean, default: true },
+  isReturnable: { type: Boolean, default: true },
+  isExchangeable: { type: Boolean, default: true },
+  isFreeShipping: { type: Boolean, default: false }
 }, { timestamps: true });
 
 export default mongoose.model('Product', productSchema);

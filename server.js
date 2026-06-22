@@ -2,7 +2,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -15,8 +15,12 @@ import reviewRoutes from './routes/reviews.js';
 import widgetRoutes from './routes/widgets.js';
 import uploadRoutes from './routes/upload.js';
 import blogRoutes from './routes/blogs.js';
-
-dotenv.config();
+import userAuthRoutes from './routes/user-auth.js';
+import orderRoutes from './routes/orders.js';
+import aboutRoutes from './routes/about.js';
+import inquiryRoutes from './routes/inquiries.js';
+import wishlistRoutes from './routes/wishlist.js';
+import cartRoutes from './routes/cart.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,6 +59,12 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/widgets', widgetRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/blogs', blogRoutes);
+app.use('/api/user-auth', userAuthRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/about', aboutRoutes);
+app.use('/api/inquiries', inquiryRoutes);
+app.use('/api/wishlist', wishlistRoutes);
+app.use('/api/cart', cartRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
