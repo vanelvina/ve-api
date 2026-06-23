@@ -10,6 +10,8 @@ const categorySchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: { type: String },
   image: { type: String },
+  plpBanner: { type: String },
+  plpBannerMobile: { type: String },
   productCount: { type: Number, default: 0 },
   subcategories: [subcategorySchema]
 }, { timestamps: true });

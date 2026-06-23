@@ -47,7 +47,16 @@ const orderSchema = new mongoose.Schema({
   shippingAddress: { type: shippingAddressSchema, required: true },
   paymentMethod: { type: String, required: true },
   paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
-  orderStatus: { type: String, enum: ['placed', 'confirmed', 'shipped', 'delivered', 'cancelled'], default: 'placed' },
+  orderStatus: { 
+    type: String, 
+    enum: ['placed', 'accepted', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'return_requested', 'exchange_requested', 'returned', 'exchanged'], 
+    default: 'placed' 
+  },
+  statusHistory: [{
+    status: { type: String },
+    timestamp: { type: Date, default: Date.now },
+    note: { type: String }
+  }],
   shippingMethod: { type: String, default: 'standard' },
   subtotal: { type: Number, required: true },
   shippingFee: { type: Number, default: 0 },

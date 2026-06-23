@@ -8,6 +8,7 @@ import OTP from '../models/OTP.js';
 import userAuth from '../middleware/userAuth.js';
 import adminAuth from '../middleware/auth.js';
 import Order from '../models/Order.js';
+import { sendEmail } from '../utils/email.js';
 
 const router = express.Router();
 const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key_for_dev_bypass');
@@ -184,6 +185,41 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     const token = signUserToken(user);
+    
+    // Trigger successful login email notification
+    sendEmail({
+      to: user.email,
+      subject: 'Successful Login - Van Elvina',
+      html: `
+        <div style="font-family: 'Georgia', serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C;">
+          <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+            <div style="background: linear-gradient(135deg,#8A4F5A,#B76E79); padding: 32px; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">Van Elvina</h1>
+              <p style="color: rgba(255,255,255,0.75); margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px;">Security Alert</p>
+            </div>
+            <div style="padding: 32px;">
+              <h2 style="color: #8A4F5A; font-size: 18px; margin: 0 0 16px;">Hello ${user.name || 'Valued Customer'},</h2>
+              <p style="color: #555; font-size: 14px; margin: 0 0 20px;">
+                We wanted to let you know that you have successfully signed in to your Van Elvina account.
+              </p>
+              <div style="background: #FAF0F1; border-radius: 12px; padding: 16px; font-size: 13px; color: #555;">
+                <strong>Sign-in details:</strong><br/>
+                • Email: ${user.email}<br/>
+                • Method: One-Time Verification Code (OTP)<br/>
+                • Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)
+              </div>
+              <p style="color: #999; font-size: 12px; margin: 24px 0 0;">
+                If this wasn't you, please contact our support team immediately.
+              </p>
+            </div>
+            <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 20px; text-align: center; font-size: 11px; color: #BBB;">
+              © 2026 Van Elvina · Premium Women's Innerwear
+            </div>
+          </div>
+        </div>
+      `
+    }).catch(err => console.error('Error sending login email:', err));
+
     return res.json({
       success: true,
       token,
@@ -254,6 +290,41 @@ router.post('/google', async (req, res) => {
     }
 
     const token = signUserToken(user);
+
+    // Trigger successful login email notification
+    sendEmail({
+      to: user.email,
+      subject: 'Successful Login - Van Elvina',
+      html: `
+        <div style="font-family: 'Georgia', serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C;">
+          <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+            <div style="background: linear-gradient(135deg,#8A4F5A,#B76E79); padding: 32px; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">Van Elvina</h1>
+              <p style="color: rgba(255,255,255,0.75); margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px;">Security Alert</p>
+            </div>
+            <div style="padding: 32px;">
+              <h2 style="color: #8A4F5A; font-size: 18px; margin: 0 0 16px;">Hello ${user.name || 'Valued Customer'},</h2>
+              <p style="color: #555; font-size: 14px; margin: 0 0 20px;">
+                We wanted to let you know that you have successfully signed in to your Van Elvina account.
+              </p>
+              <div style="background: #FAF0F1; border-radius: 12px; padding: 16px; font-size: 13px; color: #555;">
+                <strong>Sign-in details:</strong><br/>
+                • Email: ${user.email}<br/>
+                • Method: Google Account Auth<br/>
+                • Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)
+              </div>
+              <p style="color: #999; font-size: 12px; margin: 24px 0 0;">
+                If this wasn't you, please contact our support team immediately.
+              </p>
+            </div>
+            <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 20px; text-align: center; font-size: 11px; color: #BBB;">
+              © 2026 Van Elvina · Premium Women's Innerwear
+            </div>
+          </div>
+        </div>
+      `
+    }).catch(err => console.error('Error sending Google login email:', err));
+
     return res.json({
       success: true,
       token,
@@ -269,6 +340,170 @@ router.post('/google', async (req, res) => {
   } catch (err) {
     console.error('google-auth error:', err);
     return res.status(401).json({ message: 'Google authentication failed. Please try again.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/user-auth/signup — Email/Password Signup
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/signup', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+    const cleanEmail = email.toLowerCase().trim();
+    
+    let user = await User.findOne({ email: cleanEmail });
+    if (user) {
+      return res.status(400).json({ message: 'User with this email already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    user = await User.create({
+      email: cleanEmail,
+      name: name?.trim() || cleanEmail.split('@')[0],
+      password: hashedPassword,
+      authMethod: 'email',
+      isVerified: true,
+      isGuest: false,
+      isActive: true,
+      lastLoginAt: new Date()
+    });
+
+    const token = signUserToken(user);
+
+    // Trigger welcome / signup confirmation email notification
+    sendEmail({
+      to: user.email,
+      subject: 'Welcome to Van Elvina!',
+      html: `
+        <div style="font-family: 'Georgia', serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C;">
+          <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+            <div style="background: linear-gradient(135deg,#8A4F5A,#B76E79); padding: 32px; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">Van Elvina</h1>
+              <p style="color: rgba(255,255,255,0.75); margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px;">Welcome!</p>
+            </div>
+            <div style="padding: 32px;">
+              <h2 style="color: #8A4F5A; font-size: 18px; margin: 0 0 16px;">Hello ${user.name || 'Valued Customer'},</h2>
+              <p style="color: #555; font-size: 14px; margin: 0 0 20px;">
+                Thank you for creating an account with Van Elvina. We are thrilled to have you join our circle of comfort and elegance.
+              </p>
+              <div style="background: #FAF0F1; border-radius: 12px; padding: 16px; font-size: 13px; color: #555;">
+                <strong>Account details:</strong><br/>
+                • Email: ${user.email}<br/>
+                • Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)
+              </div>
+            </div>
+            <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 20px; text-align: center; font-size: 11px; color: #BBB;">
+              © 2026 Van Elvina · Premium Women's Innerwear
+            </div>
+          </div>
+        </div>
+      `
+    }).catch(err => console.error('Error sending signup email:', err));
+
+    return res.status(201).json({
+      success: true,
+      token,
+      isNewUser: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        authMethod: user.authMethod,
+      }
+    });
+  } catch (err) {
+    console.error('signup error:', err);
+    return res.status(500).json({ message: 'Server error during signup' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/user-auth/login — Email/Password Login
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+    const cleanEmail = email.toLowerCase().trim();
+
+    const user = await User.findOne({ email: cleanEmail });
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ message: 'Your account has been suspended by the administrator.' });
+    }
+
+    if (!user.password) {
+      return res.status(401).json({ message: 'Please login with Google.' });
+    }
+
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    user.lastLoginAt = new Date();
+    await user.save();
+
+    const token = signUserToken(user);
+
+    // Trigger successful login email notification
+    sendEmail({
+      to: user.email,
+      subject: 'Successful Login - Van Elvina',
+      html: `
+        <div style="font-family: 'Georgia', serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C;">
+          <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+            <div style="background: linear-gradient(135deg,#8A4F5A,#B76E79); padding: 32px; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">Van Elvina</h1>
+              <p style="color: rgba(255,255,255,0.75); margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px;">Security Alert</p>
+            </div>
+            <div style="padding: 32px;">
+              <h2 style="color: #8A4F5A; font-size: 18px; margin: 0 0 16px;">Hello ${user.name || 'Valued Customer'},</h2>
+              <p style="color: #555; font-size: 14px; margin: 0 0 20px;">
+                We wanted to let you know that you have successfully signed in to your Van Elvina account.
+              </p>
+              <div style="background: #FAF0F1; border-radius: 12px; padding: 16px; font-size: 13px; color: #555;">
+                <strong>Sign-in details:</strong><br/>
+                • Email: ${user.email}<br/>
+                • Method: Password Auth<br/>
+                • Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)
+              </div>
+              <p style="color: #999; font-size: 12px; margin: 24px 0 0;">
+                If this wasn't you, please contact our support team immediately.
+              </p>
+            </div>
+            <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 20px; text-align: center; font-size: 11px; color: #BBB;">
+              © 2026 Van Elvina · Premium Women's Innerwear
+            </div>
+          </div>
+        </div>
+      `
+    }).catch(err => console.error('Error sending login email:', err));
+
+    return res.json({
+      success: true,
+      token,
+      isNewUser: false,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        authMethod: user.authMethod,
+      }
+    });
+  } catch (err) {
+    console.error('login error:', err);
+    return res.status(500).json({ message: 'Server error during login' });
   }
 });
 
@@ -291,21 +526,111 @@ router.get('/me', userAuth, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUT /api/user-auth/me — Update profile name
+// PUT /api/user-auth/me — Update profile
 // ─────────────────────────────────────────────────────────────────────────────
 router.put('/me', userAuth, async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, phone } = req.body;
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     if (!user.isActive) {
       return res.status(403).json({ message: 'Your account has been suspended by the administrator.' });
     }
-    user.name = name?.trim();
+    if (name !== undefined) user.name = name?.trim();
+    if (phone !== undefined) user.phone = phone?.trim();
     await user.save();
     return res.json(user);
   } catch (err) {
     return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/user-auth/addresses — Add a new address
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/addresses', userAuth, async (req, res) => {
+  try {
+    const addressData = req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    if (addressData.isDefault || user.addresses.length === 0) {
+      addressData.isDefault = true;
+      user.addresses.forEach(a => a.isDefault = false);
+    }
+    
+    user.addresses.push(addressData);
+    await user.save();
+    return res.status(201).json(user.addresses[user.addresses.length - 1]);
+  } catch (err) {
+    console.error('add address error:', err);
+    return res.status(500).json({ message: 'Failed to add address' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUT /api/user-auth/addresses/:id — Edit/update an address
+// ─────────────────────────────────────────────────────────────────────────────
+router.put('/addresses/:id', userAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const addressIndex = user.addresses.findIndex(a => a._id.toString() === req.params.id);
+    if (addressIndex === -1) {
+      return res.status(404).json({ message: 'Address not found' });
+    }
+
+    const updatedData = req.body;
+    
+    // If setting this one to default, mark all others as false
+    if (updatedData.isDefault) {
+      user.addresses.forEach(a => a.isDefault = false);
+    }
+
+    // Merge/update address fields
+    const targetAddress = user.addresses[addressIndex];
+    if (updatedData.fullName !== undefined) targetAddress.fullName = updatedData.fullName;
+    if (updatedData.email !== undefined) targetAddress.email = updatedData.email;
+    if (updatedData.phone !== undefined) targetAddress.phone = updatedData.phone;
+    if (updatedData.line1 !== undefined) targetAddress.line1 = updatedData.line1;
+    if (updatedData.line2 !== undefined) targetAddress.line2 = updatedData.line2;
+    if (updatedData.city !== undefined) targetAddress.city = updatedData.city;
+    if (updatedData.state !== undefined) targetAddress.state = updatedData.state;
+    if (updatedData.pincode !== undefined) targetAddress.pincode = updatedData.pincode;
+    if (updatedData.isDefault !== undefined) targetAddress.isDefault = updatedData.isDefault;
+
+    // If we updated default status and none are default, make sure at least one is default
+    if (user.addresses.length > 0 && !user.addresses.some(a => a.isDefault)) {
+      user.addresses[0].isDefault = true;
+    }
+
+    await user.save();
+    return res.json(user.addresses[addressIndex]);
+  } catch (err) {
+    console.error('update address error:', err);
+    return res.status(500).json({ message: 'Failed to update address' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE /api/user-auth/addresses/:id — Remove an address
+// ─────────────────────────────────────────────────────────────────────────────
+router.delete('/addresses/:id', userAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    user.addresses = user.addresses.filter(a => a._id.toString() !== req.params.id);
+    
+    if (user.addresses.length > 0 && !user.addresses.some(a => a.isDefault)) {
+      user.addresses[0].isDefault = true;
+    }
+
+    await user.save();
+    return res.json({ success: true, addresses: user.addresses });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to delete address' });
   }
 });
 
@@ -369,6 +694,36 @@ router.delete('/admin/users/:id', adminAuth, async (req, res) => {
     return res.json({ success: true, message: 'User access removed successfully' });
   } catch (err) {
     return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/user-auth/admin/send-custom-email — Admin: send a custom email to a customer
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/admin/send-custom-email', adminAuth, async (req, res) => {
+  try {
+    const { to, subject, body } = req.body;
+    if (!to || !subject || !body) {
+      return res.status(400).json({ message: 'Recipient (to), subject, and body are required' });
+    }
+
+    const htmlBody = `
+      <div style="font-family: 'Georgia', serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+          <h2 style="color: #8A4F5A; margin-top: 0; text-align: center;">Van Elvina</h2>
+          <div style="border-top: 1px solid #E8C5CA; margin: 15px 0;"></div>
+          <p style="white-space: pre-line; font-size: 14px; color: #555;">${body}</p>
+          <div style="border-top: 1px solid #E8C5CA; margin: 20px 0 10px;"></div>
+          <p style="font-size: 11px; color: #999; text-align: center; margin: 0;">This is an administrative message sent by Van Elvina support.</p>
+        </div>
+      </div>
+    `;
+
+    await sendEmail({ to, subject, html: htmlBody });
+    return res.json({ success: true, message: 'Email sent successfully' });
+  } catch (err) {
+    console.error('Send custom email error:', err);
+    return res.status(500).json({ message: err.message || 'Failed to send custom email' });
   }
 });
 
