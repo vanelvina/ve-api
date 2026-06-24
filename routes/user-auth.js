@@ -111,7 +111,7 @@ router.post('/send-otp', async (req, res) => {
     });
 
     // Check if user already exists (determines purpose)
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email, authMethod: 'email' });
     const purpose = existingUser ? 'login' : 'signup';
 
     // Send email
@@ -156,7 +156,7 @@ router.post('/verify-otp', async (req, res) => {
     await OTP.deleteMany({ identifier: email });
 
     // Find or create user
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email, authMethod: 'email' });
     const isNewUser = !user;
 
     if (!user) {
@@ -261,8 +261,8 @@ router.post('/google', async (req, res) => {
       return res.status(400).json({ message: 'Google account must have an email' });
     }
 
-    // Find by googleId or email
-    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+    // Find by googleId or email where authMethod is google
+    let user = await User.findOne({ $or: [{ googleId }, { email, authMethod: 'google' }] });
     const isNewUser = !user;
 
     if (!user) {
@@ -284,7 +284,8 @@ router.post('/google', async (req, res) => {
       user.lastLoginAt = new Date();
       // Link Google ID if signing in via Google for first time
       if (!user.googleId) user.googleId = googleId;
-      if (!user.avatar && picture) user.avatar = picture;
+      // Always sync/update Google profile image (avatar) if provided
+      if (picture) user.avatar = picture;
       if (!user.isVerified) user.isVerified = true;
       await user.save();
     }
@@ -354,7 +355,7 @@ router.post('/signup', async (req, res) => {
     }
     const cleanEmail = email.toLowerCase().trim();
     
-    let user = await User.findOne({ email: cleanEmail });
+    let user = await User.findOne({ email: cleanEmail, authMethod: 'email' });
     if (user) {
       return res.status(400).json({ message: 'User with this email already exists' });
     }
@@ -433,7 +434,7 @@ router.post('/login', async (req, res) => {
     }
     const cleanEmail = email.toLowerCase().trim();
 
-    const user = await User.findOne({ email: cleanEmail });
+    const user = await User.findOne({ email: cleanEmail, authMethod: 'email' });
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }

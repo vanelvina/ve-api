@@ -158,6 +158,20 @@ const triggerOrderEmail = async (order, type, note = '') => {
     if (subject && htmlContent) {
       await sendEmail({ to: customer.email, subject, html: htmlContent });
       console.log(`Order email notification sent successfully to ${customer.email} for order ${order.orderId} (${type}).`);
+
+      if (type === 'confirmed') {
+        const supportSubject = `New Order Received: ${order.orderId}`;
+        const supportHtml = `
+          <div style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2 style="color: #8A4F5A;">New Order Received</h2>
+            <p>A new order <strong>${order.orderId}</strong> has just been placed by <strong>${customer.name || 'Customer'}</strong> (${customer.email}).</p>
+            <p><strong>Order Total:</strong> ₹${order.total.toLocaleString('en-IN')}</p>
+            <p>Please check the <a href="${process.env.APP_URL || 'http://localhost:3000'}/admin/dashboard">admin dashboard</a> for full details.</p>
+          </div>
+        `;
+        await sendEmail({ to: 'support@vanelvina.com', subject: supportSubject, html: supportHtml });
+        console.log(`Admin notification sent to support@vanelvina.com for order ${order.orderId}.`);
+      }
     }
   } catch (err) {
     console.error(`Failed to send order email for order ${order?.orderId}:`, err);

@@ -50,4 +50,39 @@ router.post('/toggle', userAuth, async (req, res) => {
   }
 });
 
+// POST /api/wishlist/merge - Merge multiple products into user's wishlist
+router.post('/merge', userAuth, async (req, res) => {
+  const { productIds } = req.body;
+  if (!Array.isArray(productIds)) {
+    return res.status(400).json({ message: 'productIds array is required' });
+  }
+
+  try {
+    let wishlist = await Wishlist.findOne({ userId: req.user.id });
+    if (!wishlist) {
+      wishlist = await Wishlist.create({ userId: req.user.id, products: [] });
+    }
+
+    let addedCount = 0;
+    for (const pId of productIds) {
+      if (pId && !wishlist.products.includes(pId)) {
+        const productExists = await Product.exists({ _id: pId });
+        if (productExists) {
+          wishlist.products.push(pId);
+          addedCount++;
+        }
+      }
+    }
+
+    if (addedCount > 0) {
+      await wishlist.save();
+    }
+
+    const populated = await Wishlist.findOne({ userId: req.user.id }).populate('products');
+    res.json(populated.products);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 export default router;

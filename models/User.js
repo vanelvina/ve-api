@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
   name: { type: String, trim: true, default: '' },
-  email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
+  email: { type: String, lowercase: true, trim: true },
   password: { type: String },
   googleId: { type: String, unique: true, sparse: true },
   avatar: { type: String, default: '' },
@@ -24,5 +24,7 @@ const userSchema = new mongoose.Schema({
   }],
   lastLoginAt: { type: Date, default: Date.now },
 }, { timestamps: true });
+
+userSchema.index({ email: 1, authMethod: 1 }, { unique: true });
 
 export default mongoose.model('User', userSchema);
