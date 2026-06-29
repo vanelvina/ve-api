@@ -60,7 +60,7 @@ router.get('/', async (c) => {
       const { count } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
-        .ilike('category', row.name);
+        .ilike('category', `%${row.name}%`);
 
       return {
         _id: row.id,
@@ -154,7 +154,7 @@ router.put('/:id', authMiddleware, async (c) => {
     const { count } = await supabase
       .from('products')
       .select('*', { count: 'exact', head: true })
-      .ilike('category', data.name);
+      .ilike('category', `%${data.name}%`);
 
     const mapped = {
       _id: data.id,

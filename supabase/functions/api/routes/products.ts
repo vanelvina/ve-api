@@ -128,7 +128,7 @@ async function updateCategoryProductCounts() {
       const { count, error: countError } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
-        .ilike('category', cat.name);
+        .ilike('category', `%${cat.name}%`);
       
       if (countError) throw countError;
 

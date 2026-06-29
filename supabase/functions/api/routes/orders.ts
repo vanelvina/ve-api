@@ -6,6 +6,7 @@ import Razorpay from 'npm:razorpay';
 import crypto from 'node:crypto';
 import jwt from 'npm:jsonwebtoken';
 import { sendEmail } from '../utils/email.ts';
+import { sendPushNotification } from './inquiries.ts';
 
 const router = new Hono();
 
@@ -87,126 +88,374 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
     if (type === 'confirmed') {
       subject = `Order Confirmed: ${orderFormatted.orderId} - Van Elvina`;
       htmlContent = `
-        <div style="font-family: 'Georgia', serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C;">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
-            <div style="background: linear-gradient(135deg,#8A4F5A,#B76E79); padding: 32px; text-align: center;">
-              <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">Van Elvina</h1>
-              <p style="color: rgba(255,255,255,0.75); margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px;">Order Confirmed</p>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C; margin: 0;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(92,43,53,0.06); border: 1px solid rgba(232, 197, 202, 0.4);">
+            <!-- Logo -->
+            <div style="padding: 24px; text-align: center; border-bottom: 1px solid #FAF0F1;">
+              <img src="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/logo.png" alt="Van Elvina" style="height: 38px; width: auto; display: inline-block; max-width: 100%;" />
             </div>
-            <div style="padding: 32px;">
-              <h2 style="color: #8A4F5A; font-size: 18px; margin: 0 0 16px;">Thank you for your order, ${customer.name || 'Valued Customer'}!</h2>
-              <p style="color: #555; font-size: 14px; margin: 0 0 20px;">
-                We are pleased to confirm that we have received your order. Here is your order summary:
+            <!-- Header banner -->
+            <div style="background-color: #FAF0F1; padding: 32px 24px; text-align: center; border-bottom: 1px solid #E8C5CA;">
+              <h1 style="color: #8A4F5A; margin: 0 0 8px; font-family: 'Playfair Display', Georgia, serif; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">Your Order is Confirmed! 🎉</h1>
+              <p style="color: #5C2B35; margin: 0; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">Thank you for shopping with us</p>
+            </div>
+            <!-- Body -->
+            <div style="padding: 32px 24px;">
+              <p style="font-size: 15px; margin-top: 0; margin-bottom: 24px; color: #4A4A4A;">
+                Hello <strong>${customer.name || 'Valued Customer'}</strong>, we're thrilled to let you know that we've received your order! Our team is already preparing it with the utmost care.
               </p>
               
-              <div style="background: #FAF0F1; border-radius: 12px; padding: 20px; margin-bottom: 24px; border: 1px solid #E8C5CA;">
-                <p style="margin: 0 0 10px; font-size: 13px;"><strong>Order ID:</strong> <span style="font-family: monospace; font-weight: bold; color: #8A4F5A;">${orderFormatted.orderId}</span></p>
-                <p style="margin: 0 0 15px; font-size: 13px;"><strong>Payment Method:</strong> ${orderFormatted.paymentMethod.toUpperCase()}</p>
+              <div style="background: #FAF0F1; border-radius: 16px; padding: 24px; margin-bottom: 28px; border: 1px solid #E8C5CA;">
+                <h3 style="color: #8A4F5A; font-size: 14px; margin-top: 0; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; border-bottom: 1px solid #E8C5CA; padding-bottom: 8px;">Order Details</h3>
+                <p style="margin: 0 0 8px; font-size: 13px; color: #4A4A4A;"><strong>Order Reference:</strong> <span style="font-family: monospace; font-weight: bold; color: #8A4F5A;">${orderFormatted.orderId}</span></p>
+                <p style="margin: 0 0 16px; font-size: 13px; color: #4A4A4A;"><strong>Payment Method:</strong> ${orderFormatted.paymentMethod.toUpperCase()}</p>
                 
                 <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
                   <thead>
-                    <tr style="border-bottom: 1px solid #E8C5CA; text-align: left; color: #8A4F5A;">
-                      <th style="padding: 8px 0; font-weight: bold;">Item</th>
-                      <th style="padding: 8px 0; text-align: center; font-weight: bold;">Qty</th>
-                      <th style="padding: 8px 0; text-align: right; font-weight: bold;">Price</th>
+                    <tr style="border-bottom: 1px solid #E8C5CA; text-align: left; color: #8A4F5A; font-weight: bold;">
+                      <th style="padding: 10px 0;">Item</th>
+                      <th style="padding: 10px 0; text-align: center;">Qty</th>
+                      <th style="padding: 10px 0; text-align: right;">Price</th>
                     </tr>
                   </thead>
                   <tbody>
                     ${orderFormatted.items.map((item: any) => `
                       <tr style="border-bottom: 1px solid rgba(232, 197, 202, 0.3);">
-                        <td style="padding: 8px 0; color: #555;">${item.name} ${item.size ? `(Size: ${item.size})` : ''}</td>
-                        <td style="padding: 8px 0; text-align: center; color: #555;">${item.quantity}</td>
-                        <td style="padding: 8px 0; text-align: right; color: #555;">₹${item.price.toLocaleString('en-IN')}</td>
+                        <td style="padding: 10px 0; color: #4A4A4A;">
+                          <div style="font-weight: bold;">${item.name}</div>
+                          ${item.size ? `<span style="font-size: 11px; color: #888;">Size: ${item.size}</span>` : ''}
+                        </td>
+                        <td style="padding: 10px 0; text-align: center; color: #4A4A4A; vertical-align: middle;">${item.quantity}</td>
+                        <td style="padding: 10px 0; text-align: right; color: #4A4A4A; vertical-align: middle; font-weight: bold;">₹${item.price.toLocaleString('en-IN')}</td>
                       </tr>
                     `).join('')}
                     <tr>
-                      <td colspan="2" style="padding: 10px 0 0; font-weight: bold; color: #8A4F5A;">Total Amount</td>
-                      <td style="padding: 10px 0 0; text-align: right; font-weight: bold; color: #8A4F5A; font-size: 15px;">₹${orderFormatted.total.toLocaleString('en-IN')}</td>
+                      <td colspan="2" style="padding: 16px 0 0; font-weight: bold; color: #8A4F5A; font-size: 14px;">Total Paid</td>
+                      <td style="padding: 16px 0 0; text-align: right; font-weight: bold; color: #8A4F5A; font-size: 16px;">₹${orderFormatted.total.toLocaleString('en-IN')}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
 
-              <div style="background: #FAF6F0; border-radius: 12px; padding: 20px; font-size: 13px; color: #555; border: 1px solid #F0E8E0;">
-                <h4 style="margin: 0 0 8px; color: #C5A58E; text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">Delivery Address</h4>
-                <p style="margin: 0; line-height: 1.5;">
-                  <strong>${orderFormatted.shippingAddress.name}</strong><br/>
+              <!-- Shipping Details -->
+              <div style="background: #FAF6F0; border-radius: 16px; padding: 24px; border: 1px solid #F0E8E0; margin-bottom: 32px;">
+                <h3 style="color: #C5A58E; font-size: 14px; margin-top: 0; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; border-bottom: 1px solid #F0E8E0; padding-bottom: 8px;">Delivery Details</h3>
+                <p style="margin: 0; font-size: 13px; color: #4A4A4A; line-height: 1.6;">
+                  <strong style="color: #8A4F5A; font-size: 14px;">${orderFormatted.shippingAddress.name}</strong><br/>
                   ${orderFormatted.shippingAddress.line1}${orderFormatted.shippingAddress.line2 ? `, ${orderFormatted.shippingAddress.line2}` : ''}<br/>
                   ${orderFormatted.shippingAddress.city}, ${orderFormatted.shippingAddress.state} - ${orderFormatted.shippingAddress.pincode}<br/>
-                  Phone: ${orderFormatted.shippingAddress.phone}
+                  <strong>Phone:</strong> ${orderFormatted.shippingAddress.phone}
                 </p>
               </div>
 
-              <p style="color: #999; font-size: 12px; margin: 24px 0 0; text-align: center;">
-                We will send you another update once your package has shipped!
-              </p>
+              <!-- CTA -->
+              <div style="text-align: center; margin-bottom: 16px;">
+                <a href="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/account/orders/${orderFormatted._id}" style="background-color: #8A4F5A; color: white; padding: 14px 28px; text-decoration: none; border-radius: 12px; font-weight: bold; display: inline-block; font-size: 13px; letter-spacing: 0.5px; box-shadow: 0 4px 12px rgba(138,79,90,0.2);">Track Your Order</a>
+              </div>
             </div>
-            <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 20px; text-align: center; font-size: 11px; color: #BBB;">
-              © 2026 Van Elvina · Premium Women's Innerwear
+            <!-- Footer -->
+            <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 24px; text-align: center; font-size: 11px; color: #888;">
+              <p style="margin: 0 0 6px; font-weight: bold; color: #8A4F5A;">Van Elvina</p>
+              <p style="margin: 0 0 12px;">Premium Women's Innerwear & Lingerie</p>
+              <p style="margin: 0; color: #AAA;">This is an automated order confirmation. If you have any questions, please contact support.</p>
             </div>
           </div>
         </div>
       `;
     } else if (type === 'status_updated') {
-      subject = `Order Status Update: ${orderFormatted.orderId} - ${orderFormatted.orderStatus.toUpperCase()}`;
+      subject = `Shipping Update: ${orderFormatted.orderId} - ${orderFormatted.orderStatus.replace(/_/g, ' ').toUpperCase()}`;
       htmlContent = `
-        <div style="font-family: 'Georgia', serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C;">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
-            <div style="background: linear-gradient(135deg,#8A4F5A,#B76E79); padding: 32px; text-align: center;">
-              <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">Van Elvina</h1>
-              <p style="color: rgba(255,255,255,0.75); margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px;">Order Status Update</p>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C; margin: 0;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(92,43,53,0.06); border: 1px solid rgba(232, 197, 202, 0.4);">
+            <!-- Logo -->
+            <div style="padding: 24px; text-align: center; border-bottom: 1px solid #FAF0F1;">
+              <img src="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/logo.png" alt="Van Elvina" style="height: 38px; width: auto; display: inline-block; max-width: 100%;" />
             </div>
-            <div style="padding: 32px;">
-              <h2 style="color: #8A4F5A; font-size: 18px; margin: 0 0 16px;">Hello ${customer.name || 'Valued Customer'},</h2>
-              <p style="color: #555; font-size: 14px; margin: 0 0 20px;">
-                The status of your order <strong>${orderFormatted.orderId}</strong> has been updated.
+            <!-- Header banner -->
+            <div style="background-color: #FAF0F1; padding: 32px 24px; text-align: center; border-bottom: 1px solid #E8C5CA;">
+              <h1 style="color: #8A4F5A; margin: 0 0 8px; font-family: 'Playfair Display', Georgia, serif; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">Shipping Update 📦</h1>
+              <p style="color: #5C2B35; margin: 0; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">Your order has a new status</p>
+            </div>
+            <!-- Body -->
+            <div style="padding: 32px 24px;">
+              <p style="font-size: 15px; margin-top: 0; margin-bottom: 24px; color: #4A4A4A;">
+                Hello <strong>${customer.name || 'Valued Customer'}</strong>, we've updated the status of your order <strong>${orderFormatted.orderId}</strong>.
               </p>
               
-              <div style="background: #FAF0F1; border-radius: 12px; padding: 20px; margin-bottom: 24px; border: 1px solid #E8C5CA; text-align: center;">
-                <span style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #999;">Current Status</span>
-                <div style="font-size: 24px; font-weight: bold; color: #8A4F5A; margin: 8px 0;">
+              <div style="background: #FAF0F1; border-radius: 16px; padding: 24px; margin-bottom: 28px; border: 1px solid #E8C5CA; text-align: center;">
+                <span style="font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #888;">Current Status</span>
+                <div style="font-size: 22px; font-weight: bold; color: #8A4F5A; margin: 8px 0; font-family: Georgia, serif;">
                   ${orderFormatted.orderStatus.replace(/_/g, ' ').toUpperCase()}
                 </div>
-                ${note ? `<p style="margin: 10px 0 0; font-size: 13px; color: #666; font-style: italic;">Note: "${note}"</p>` : ''}
+                ${note ? `<p style="margin: 12px 0 0; font-size: 13px; color: #5C2B35; font-style: italic; background: white; padding: 10px; border-radius: 8px; border: 1px dashed #E8C5CA;">"${note}"</p>` : ''}
               </div>
 
-              <div style="background: #FAF6F0; border-radius: 12px; padding: 20px; font-size: 13px; color: #555; border: 1px solid #F0E8E0;">
-                <h4 style="margin: 0 0 8px; color: #C5A58E; text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">Order Summary</h4>
-                <p style="margin: 0 0 5px;"><strong>Order ID:</strong> ${orderFormatted.orderId}</p>
-                <p style="margin: 0 0 5px;"><strong>Total Amount:</strong> ₹${orderFormatted.total.toLocaleString('en-IN')}</p>
-                <p style="margin: 0;"><strong>Shipping To:</strong> ${orderFormatted.shippingAddress.name} (${orderFormatted.shippingAddress.city})</p>
+              <!-- Shipping Details -->
+              <div style="background: #FAF6F0; border-radius: 16px; padding: 24px; border: 1px solid #F0E8E0; margin-bottom: 32px;">
+                <h3 style="color: #C5A58E; font-size: 14px; margin-top: 0; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; border-bottom: 1px solid #F0E8E0; padding-bottom: 8px;">Order Summary</h3>
+                <p style="margin: 0; font-size: 13px; color: #4A4A4A; line-height: 1.6;">
+                  <strong>Order Reference:</strong> ${orderFormatted.orderId}<br/>
+                  <strong>Grand Total:</strong> ₹${orderFormatted.total.toLocaleString('en-IN')}<br/>
+                  <strong>Shipping To:</strong> ${orderFormatted.shippingAddress.name} (${orderFormatted.shippingAddress.city})
+                </p>
               </div>
 
-              <p style="color: #999; font-size: 12px; margin: 24px 0 0; text-align: center;">
-                If you have any questions or concerns regarding this update, please reply to this email or contact support.
+              <!-- CTA -->
+              <div style="text-align: center; margin-bottom: 16px;">
+                <a href="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/account/orders/${orderFormatted._id}" style="background-color: #8A4F5A; color: white; padding: 14px 28px; text-decoration: none; border-radius: 12px; font-weight: bold; display: inline-block; font-size: 13px; letter-spacing: 0.5px; box-shadow: 0 4px 12px rgba(138,79,90,0.2);">View Order History</a>
+              </div>
+            </div>
+            <!-- Footer -->
+            <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 24px; text-align: center; font-size: 11px; color: #888;">
+              <p style="margin: 0 0 6px; font-weight: bold; color: #8A4F5A;">Van Elvina</p>
+              <p style="margin: 0 0 12px;">Premium Women's Innerwear & Lingerie</p>
+              <p style="margin: 0; color: #AAA;">If you have any questions or feedback, please reply to this email.</p>
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (type === 'return_requested') {
+      subject = `Return Request Received: ${orderFormatted.orderId} - Van Elvina`;
+      htmlContent = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C; margin: 0;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(92,43,53,0.06); border: 1px solid rgba(232, 197, 202, 0.4);">
+            <!-- Logo -->
+            <div style="padding: 24px; text-align: center; border-bottom: 1px solid #FAF0F1;">
+              <img src="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/logo.png" alt="Van Elvina" style="height: 38px; width: auto; display: inline-block; max-width: 100%;" />
+            </div>
+            <!-- Header banner -->
+            <div style="background-color: #FAF0F1; padding: 32px 24px; text-align: center; border-bottom: 1px solid #E8C5CA;">
+              <h1 style="color: #8A4F5A; margin: 0 0 8px; font-family: 'Playfair Display', Georgia, serif; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">Return Requested 🔄</h1>
+              <p style="color: #5C2B35; margin: 0; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">Fulfillment Request Initiated</p>
+            </div>
+            <!-- Body -->
+            <div style="padding: 32px 24px;">
+              <p style="font-size: 15px; margin-top: 0; margin-bottom: 24px; color: #4A4A4A;">
+                Hello <strong>${customer.name || 'Valued Customer'}</strong>, we've registered your request to return items from order <strong>${orderFormatted.orderId}</strong>.
+              </p>
+              
+              <div style="background: #FAF0F1; border-radius: 16px; padding: 24px; margin-bottom: 28px; border: 1px solid #E8C5CA;">
+                <p style="margin: 0 0 8px; font-size: 13px; color: #4A4A4A;"><strong>Return Reason:</strong> "${note || 'Not specified'}"</p>
+                <p style="margin: 0; font-size: 13px; color: #4A4A4A;"><strong>Status:</strong> Awaiting Reverse Pickup</p>
+              </div>
+
+              <!-- Pickup Address Details -->
+              <div style="background: #FAF6F0; border-radius: 16px; padding: 24px; border: 1px solid #F0E8E0; margin-bottom: 28px;">
+                <h3 style="color: #C5A58E; font-size: 14px; margin-top: 0; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; border-bottom: 1px solid #F0E8E0; padding-bottom: 8px;">Pickup Address</h3>
+                <p style="margin: 0; font-size: 13px; color: #4A4A4A; line-height: 1.6;">
+                  <strong>Name:</strong> ${orderFormatted.shippingAddress.name}<br/>
+                  <strong>Address:</strong> ${orderFormatted.shippingAddress.line1}${orderFormatted.shippingAddress.line2 ? `, ${orderFormatted.shippingAddress.line2}` : ''}<br/>
+                  ${orderFormatted.shippingAddress.city}, ${orderFormatted.shippingAddress.state} - ${orderFormatted.shippingAddress.pincode}<br/>
+                  <strong>Phone:</strong> ${orderFormatted.shippingAddress.phone}
+                </p>
+              </div>
+
+              <h4 style="color: #8A4F5A; font-size: 14px; margin-top: 0; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">Important Guidelines for Pickup</h4>
+              <ul style="margin: 0 0 28px; padding-left: 20px; font-size: 13px; color: #555; line-height: 1.7;">
+                <li style="margin-bottom: 8px;"><strong>Keep tags attached:</strong> The product must be returned with all original tags, labels, and price tickets intact.</li>
+                <li style="margin-bottom: 8px;"><strong>Keep packaging:</strong> Please secure the items in their original boxes or plastic bags.</li>
+                <li style="margin-bottom: 8px;"><strong>Condition check:</strong> Items must be completely clean, unworn, and unwashed. Our courier agent will verify this.</li>
+                <li style="margin-bottom: 0;"><strong>Refund Process:</strong> Once we receive the package back at our warehouse and verify it, your refund will be processed to the original payment source within 5-7 business days.</li>
+              </ul>
+
+              <p style="color: #8A4F5A; font-size: 13px; text-align: center; font-weight: bold;">
+                Our logistics partner will coordinate the pickup timeline within 2-3 business days.
               </p>
             </div>
-            <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 20px; text-align: center; font-size: 11px; color: #BBB;">
-              © 2026 Van Elvina · Premium Women's Innerwear
+            <!-- Footer -->
+            <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 24px; text-align: center; font-size: 11px; color: #888;">
+              <p style="margin: 0 0 6px; font-weight: bold; color: #8A4F5A;">Van Elvina</p>
+              <p style="margin: 0 0 12px;">Premium Women's Innerwear & Lingerie</p>
+              <p style="margin: 0; color: #AAA;">Need help? Reply directly to this email to contact our operations desk.</p>
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (type === 'exchange_requested') {
+      subject = `Exchange Request Received: ${orderFormatted.orderId} - Van Elvina`;
+      htmlContent = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C; margin: 0;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(92,43,53,0.06); border: 1px solid rgba(232, 197, 202, 0.4);">
+            <!-- Logo -->
+            <div style="padding: 24px; text-align: center; border-bottom: 1px solid #FAF0F1;">
+              <img src="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/logo.png" alt="Van Elvina" style="height: 38px; width: auto; display: inline-block; max-width: 100%;" />
+            </div>
+            <!-- Header banner -->
+            <div style="background-color: #FAF0F1; padding: 32px 24px; text-align: center; border-bottom: 1px solid #E8C5CA;">
+              <h1 style="color: #8A4F5A; margin: 0 0 8px; font-family: 'Playfair Display', Georgia, serif; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">Exchange Requested 🔄</h1>
+              <p style="color: #5C2B35; margin: 0; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">Fulfillment Request Initiated</p>
+            </div>
+            <!-- Body -->
+            <div style="padding: 32px 24px;">
+              <p style="font-size: 15px; margin-top: 0; margin-bottom: 24px; color: #4A4A4A;">
+                Hello <strong>${customer.name || 'Valued Customer'}</strong>, we've registered your request to exchange items from order <strong>${orderFormatted.orderId}</strong>.
+              </p>
+              
+              <div style="background: #FAF0F1; border-radius: 16px; padding: 24px; margin-bottom: 28px; border: 1px solid #E8C5CA;">
+                <p style="margin: 0 0 8px; font-size: 13px; color: #4A4A4A;"><strong>Exchange Reason:</strong> "${note || 'Not specified'}"</p>
+                <p style="margin: 0; font-size: 13px; color: #4A4A4A;"><strong>Status:</strong> Awaiting Reverse Pickup</p>
+              </div>
+
+              <!-- Pickup Address Details -->
+              <div style="background: #FAF6F0; border-radius: 16px; padding: 24px; border: 1px solid #F0E8E0; margin-bottom: 28px;">
+                <h3 style="color: #C5A58E; font-size: 14px; margin-top: 0; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; border-bottom: 1px solid #F0E8E0; padding-bottom: 8px;">Pickup Address</h3>
+                <p style="margin: 0; font-size: 13px; color: #4A4A4A; line-height: 1.6;">
+                  <strong>Name:</strong> ${orderFormatted.shippingAddress.name}<br/>
+                  <strong>Address:</strong> ${orderFormatted.shippingAddress.line1}${orderFormatted.shippingAddress.line2 ? `, ${orderFormatted.shippingAddress.line2}` : ''}<br/>
+                  ${orderFormatted.shippingAddress.city}, ${orderFormatted.shippingAddress.state} - ${orderFormatted.shippingAddress.pincode}<br/>
+                  <strong>Phone:</strong> ${orderFormatted.shippingAddress.phone}
+                </p>
+              </div>
+
+              <h4 style="color: #8A4F5A; font-size: 14px; margin-top: 0; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">How the Exchange Works</h4>
+              <ul style="margin: 0 0 28px; padding-left: 20px; font-size: 13px; color: #555; line-height: 1.7;">
+                <li style="margin-bottom: 8px;"><strong>Keep tags intact:</strong> Make sure items are in original condition with tags intact.</li>
+                <li style="margin-bottom: 8px;"><strong>Keep packaging:</strong> Pack the items securely in their original wrap/box.</li>
+                <li style="margin-bottom: 8px;"><strong>Fulfillment swap:</strong> Our logistics agent will pick up the current package. Once it is received and verified at our quality check desk, we will dispatch the exchange variant/size to your address.</li>
+              </ul>
+
+              <p style="color: #8A4F5A; font-size: 13px; text-align: center; font-weight: bold;">
+                We are preparing your exchange order and scheduling the pickup timeline.
+              </p>
+            </div>
+            <!-- Footer -->
+            <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 24px; text-align: center; font-size: 11px; color: #888;">
+              <p style="margin: 0 0 6px; font-weight: bold; color: #8A4F5A;">Van Elvina</p>
+              <p style="margin: 0 0 12px;">Premium Women's Innerwear & Lingerie</p>
+              <p style="margin: 0; color: #AAA;">Need help? Reply directly to this email to contact our operations desk.</p>
             </div>
           </div>
         </div>
       `;
     }
 
+
     if (subject && htmlContent) {
       await sendEmail({ to: customer.email, subject, html: htmlContent });
       console.log(`Order email notification sent successfully to ${customer.email} for order ${order.order_id} (${type}).`);
 
       if (type === 'confirmed') {
-        const supportSubject = `New Order Received: ${orderFormatted.orderId} - Van Elvina`;
+        const orderDate = new Date(order.created_at || Date.now()).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const supportSubject = `🛒 New Order: ${orderFormatted.orderId} – ₹${orderFormatted.total.toLocaleString('en-IN')} | Van Elvina`;
+        const supportHtml = `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background-color: #FDF8F5; padding: 20px; margin: 0; color: #2C2C2C;">
+            <div style="max-width: 640px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(92,43,53,0.08); border: 1px solid rgba(232,197,202,0.5);">
+
+              <!-- Header -->
+              <div style="background: linear-gradient(135deg, #5C2B35, #8A4F5A); padding: 28px 24px; text-align: center;">
+                <h1 style="color: white; margin: 0 0 6px; font-size: 22px; font-weight: bold; letter-spacing: 0.5px;">New Order Received! 🎉</h1>
+                <p style="color: rgba(255,255,255,0.75); margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px;">Van Elvina Store Console</p>
+              </div>
+
+              <div style="padding: 28px 24px;">
+
+                <!-- Order Info Banner -->
+                <div style="background: #FAF0F1; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; border: 1px solid #E8C5CA;">
+                  <p style="margin: 0 0 6px; font-size: 13px; color: #5C2B35;"><strong>Order ID:</strong> <span style="font-family: monospace; font-weight: bold; font-size: 14px; color: #8A4F5A;">${orderFormatted.orderId}</span></p>
+                  <p style="margin: 0 0 6px; font-size: 13px; color: #555;"><strong>Placed On:</strong> ${orderDate}</p>
+                  <p style="margin: 0 0 6px; font-size: 13px; color: #555;"><strong>Payment Method:</strong> ${orderFormatted.paymentMethod.toUpperCase()}</p>
+                  <p style="margin: 0; font-size: 15px; color: #5C2B35; font-weight: bold;">Total: ₹${orderFormatted.total.toLocaleString('en-IN')}</p>
+                </div>
+
+                <!-- Customer Info -->
+                <h3 style="color: #8A4F5A; font-size: 12px; font-weight: bold; margin: 0 0 10px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #FAF0F1; padding-bottom: 6px;">Customer</h3>
+                <p style="margin: 0 0 4px; font-size: 13px;"><strong>Name:</strong> ${customer.name || 'N/A'}</p>
+                <p style="margin: 0 0 20px; font-size: 13px;"><strong>Email:</strong> <a href="mailto:${customer.email}" style="color: #8A4F5A;">${customer.email || 'N/A'}</a></p>
+
+                <!-- Shipping Address -->
+                <h3 style="color: #8A4F5A; font-size: 12px; font-weight: bold; margin: 0 0 10px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #FAF0F1; padding-bottom: 6px;">Shipping Address</h3>
+                <p style="margin: 0 0 20px; font-size: 13px; line-height: 1.7;">
+                  <strong>${orderFormatted.shippingAddress.name}</strong><br/>
+                  ${orderFormatted.shippingAddress.line1}${orderFormatted.shippingAddress.line2 ? `, ${orderFormatted.shippingAddress.line2}` : ''}<br/>
+                  ${orderFormatted.shippingAddress.city}, ${orderFormatted.shippingAddress.state} – ${orderFormatted.shippingAddress.pincode}<br/>
+                  <strong>Phone:</strong> ${orderFormatted.shippingAddress.phone}
+                </p>
+
+                <!-- Order Items with Images -->
+                <h3 style="color: #8A4F5A; font-size: 12px; font-weight: bold; margin: 0 0 10px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #FAF0F1; padding-bottom: 6px;">Items Ordered</h3>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                  <thead>
+                    <tr style="background-color: #FAF0F1; border-bottom: 1px solid #E8C5CA; text-align: left;">
+                      <th style="padding: 10px 8px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; color: #8A4F5A;">Photo</th>
+                      <th style="padding: 10px 8px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; color: #8A4F5A;">Product</th>
+                      <th style="padding: 10px 8px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; color: #8A4F5A;">Qty</th>
+                      <th style="padding: 10px 8px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; text-align: right; color: #8A4F5A;">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${orderFormatted.items.map((item: any) => `
+                      <tr style="border-bottom: 1px solid rgba(232, 197, 202, 0.3); vertical-align: middle;">
+                        <td style="padding: 10px 8px; width: 60px;">
+                          ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 52px; height: 60px; object-fit: cover; border-radius: 6px; display: block; border: 1px solid #FAF0F1;" />` : '<div style="width:52px;height:60px;background:#FAF0F1;border-radius:6px;"></div>'}
+                        </td>
+                        <td style="padding: 10px 8px; font-size: 13px;">
+                          <strong style="display: block; color: #2C2C2C;">${item.name}</strong>
+                          <span style="font-size: 11px; color: #888; display: block; margin-top: 3px;">${[item.color, item.size ? `Size: ${item.size}` : ''].filter(Boolean).join(' · ') || 'Standard'}</span>
+                        </td>
+                        <td style="padding: 10px 8px; font-size: 13px; text-align: center; color: #555;">× ${item.quantity}</td>
+                        <td style="padding: 10px 8px; font-size: 13px; text-align: right; font-weight: bold; color: #2C2C2C;">₹${(item.price * item.quantity).toLocaleString('en-IN')}</td>
+                      </tr>
+                    `).join('')}
+                    <tr style="background: #FAF6F0;">
+                      <td colspan="3" style="padding: 8px 10px; font-size: 12px; color: #555;">Subtotal</td>
+                      <td style="padding: 8px 10px; font-size: 12px; text-align: right; color: #555;">₹${orderFormatted.subtotal.toLocaleString('en-IN')}</td>
+                    </tr>
+                    <tr style="background: #FAF6F0;">
+                      <td colspan="3" style="padding: 4px 10px; font-size: 12px; color: #555;">Shipping</td>
+                      <td style="padding: 4px 10px; font-size: 12px; text-align: right; color: #555;">₹${orderFormatted.shippingFee.toLocaleString('en-IN')}</td>
+                    </tr>
+                    <tr style="background: #FAF6F0;">
+                      <td colspan="3" style="padding: 4px 10px; font-size: 12px; color: #555;">Discount</td>
+                      <td style="padding: 4px 10px; font-size: 12px; text-align: right; color: #22a722;">-₹${orderFormatted.discount.toLocaleString('en-IN')}</td>
+                    </tr>
+                    <tr style="font-weight: bold; font-size: 15px; color: #8A4F5A;">
+                      <td colspan="3" style="padding: 12px 10px; border-top: 2px solid #8A4F5A;">Grand Total</td>
+                      <td style="padding: 12px 10px; border-top: 2px solid #8A4F5A; text-align: right;">₹${orderFormatted.total.toLocaleString('en-IN')}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <!-- CTA -->
+                <div style="text-align: center; margin-top: 24px;">
+                  <a href="https://vanelvina.com/admin/dashboard" style="background-color: #8A4F5A; color: white; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block; font-size: 13px; letter-spacing: 0.5px;">Open Admin Dashboard →</a>
+                </div>
+
+              </div>
+
+              <!-- Footer -->
+              <div style="background: #FAF6F0; border-top: 1px solid #F0E8E0; padding: 16px 24px; text-align: center; font-size: 11px; color: #AAA;">
+                Van Elvina Store Console – Automated Order Alert
+              </div>
+
+            </div>
+          </div>
+        `;
+        await sendEmail({ to: 'support@vanelvina.com', subject: supportSubject, html: supportHtml });
+        console.log(`Admin notification sent to support@vanelvina.com for order ${order.order_id}.`);
+
+      } else if (type === 'return_requested' || type === 'exchange_requested') {
+        const isReturn = type === 'return_requested';
+        const supportSubject = `${isReturn ? '⚠️ RETURN' : '🔄 EXCHANGE'} REQUESTED: Order ${orderFormatted.orderId} - Van Elvina`;
         const supportHtml = `
           <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; color: #333; max-width: 650px; margin: 0 auto; border: 1px solid #E8C5CA; border-radius: 12px;">
-            <h2 style="color: #8A4F5A; border-bottom: 2px solid #8A4F5A; padding-bottom: 8px; margin-top: 0;">New Order Received! 🎉</h2>
-            <p>A new order has been placed on Van Elvina.</p>
+            <h2 style="color: #8A4F5A; border-bottom: 2px solid #8A4F5A; padding-bottom: 8px; margin-top: 0;">
+              ${isReturn ? 'Return' : 'Exchange'} Request Received
+            </h2>
+            <p>A customer has initiated a <strong>${isReturn ? 'return' : 'exchange'}</strong> request on Van Elvina.</p>
             
+            <div style="background-color: #FDF8F5; border: 1px solid #E8C5CA; padding: 15px; border-radius: 8px; margin: 15px 0;">
+              <p style="margin: 0 0 8px;"><strong>Order Reference ID:</strong> ${orderFormatted.orderId}</p>
+              <p style="margin: 0 0 8px;"><strong>Type:</strong> ${isReturn ? 'Return (Refund)' : 'Exchange (Product Swap)'}</p>
+              <p style="margin: 0;"><strong>Reason:</strong> "${note || 'Not specified'}"</p>
+            </div>
+
             <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Customer Details</h3>
             <p style="margin: 8px 0;">
               <strong>Name:</strong> ${customer.name || 'N/A'}<br/>
               <strong>Email:</strong> ${customer.email || 'N/A'}
             </p>
 
-            <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Shipping Address</h3>
+            <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Pickup Address</h3>
             <p style="margin: 8px 0;">
               <strong>Name:</strong> ${orderFormatted.shippingAddress.name}<br/>
               <strong>Phone:</strong> ${orderFormatted.shippingAddress.phone}<br/>
@@ -214,7 +463,7 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
               <strong>City/State/Zip:</strong> ${orderFormatted.shippingAddress.city}, ${orderFormatted.shippingAddress.state} - ${orderFormatted.shippingAddress.pincode}
             </p>
 
-            <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Order Items</h3>
+            <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Original Order Items</h3>
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
               <thead>
                 <tr style="background-color: #FAF0F1; border-bottom: 1px solid #E8C5CA; text-align: left;">
@@ -235,32 +484,20 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
                     <td style="padding: 10px; font-size: 13px; text-align: right;">₹${item.price.toLocaleString('en-IN')}</td>
                   </tr>
                 `).join('')}
-                <tr style="font-weight: bold;">
-                  <td colspan="4" style="padding: 10px 10px 0; text-align: left; font-size: 13px;">Subtotal</td>
-                  <td style="padding: 10px 10px 0; text-align: right; font-size: 13px;">₹${orderFormatted.subtotal.toLocaleString('en-IN')}</td>
-                </tr>
-                <tr style="font-weight: bold;">
-                  <td colspan="4" style="padding: 5px 10px 0; text-align: left; font-size: 13px;">Shipping Fee</td>
-                  <td style="padding: 5px 10px 0; text-align: right; font-size: 13px;">₹${orderFormatted.shippingFee.toLocaleString('en-IN')}</td>
-                </tr>
-                <tr style="font-weight: bold;">
-                  <td colspan="4" style="padding: 5px 10px 0; text-align: left; font-size: 13px;">Discount</td>
-                  <td style="padding: 5px 10px 0; text-align: right; font-size: 13px;">-₹${orderFormatted.discount.toLocaleString('en-IN')}</td>
-                </tr>
-                <tr style="font-weight: bold; font-size: 15px; color: #8A4F5A;">
-                  <td colspan="4" style="padding: 10px; border-top: 2px solid #8A4F5A; text-align: left;">Total Paid</td>
+                <tr style="font-weight: bold; color: #8A4F5A;">
+                  <td colspan="4" style="padding: 10px; border-top: 2px solid #8A4F5A; text-align: left;">Total Order Value</td>
                   <td style="padding: 10px; border-top: 2px solid #8A4F5A; text-align: right;">₹${orderFormatted.total.toLocaleString('en-IN')}</td>
                 </tr>
               </tbody>
             </table>
 
             <p style="margin-top: 30px; text-align: center;">
-              <a href="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/admin/dashboard" style="background-color: #8A4F5A; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Manage Order on Admin Dashboard</a>
+              <a href="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/admin/dashboard" style="background-color: #8A4F5A; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View in Admin Dashboard</a>
             </p>
           </div>
         `;
         await sendEmail({ to: 'support@vanelvina.com', subject: supportSubject, html: supportHtml });
-        console.log(`Admin notification sent to support@vanelvina.com for order ${order.order_id}.`);
+        console.log(`Admin return/exchange notification email sent to support@vanelvina.com for order ${order.order_id}.`);
       }
     }
   } catch (err) {
@@ -352,6 +589,7 @@ router.post('/', optionalAuth, async (c) => {
 
     // Trigger order confirmation email notification
     triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering COD order email:', err));
+    sendPushNotification(order.email, 'Order Placed! 🎉', `Thank you! Your Order #${order.order_id} for ₹${order.total} has been received.`, `/account/orders/${order.id}`).catch(() => {});
 
     return c.json({
       success: true,
@@ -469,6 +707,7 @@ router.post('/verify-payment', optionalAuth, async (c) => {
 
       // Trigger order confirmation email notification
       triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering payment-confirmed order email:', err));
+      sendPushNotification(order.email, 'Payment Confirmed! 💳', `Thank you! Your Order #${order.order_id} for ₹${order.total} payment is confirmed.`, `/account/orders/${order.id}`).catch(() => {});
 
       return c.json({
         success: true,
@@ -635,6 +874,9 @@ router.put('/:id/status', authMiddleware, async (c) => {
 
     if (statusChanged) {
       triggerOrderEmail(updatedOrder, 'status_updated', note).catch(err => console.error('Error triggering status update email:', err));
+      const statusTitle = 'Order Update 📦';
+      const statusBody = `Your Order #${updatedOrder.order_id} status has been updated to: ${updatedOrder.order_status.replace(/_/g, ' ').toUpperCase()}`;
+      sendPushNotification(updatedOrder.email, statusTitle, statusBody, `/account/orders/${updatedOrder.id}`).catch(() => {});
     }
 
     return c.json(formatOrderForFrontend(updatedOrder));
@@ -700,6 +942,9 @@ router.post('/:id/return', userAuthMiddleware, async (c) => {
 
     if (updateErr) throw updateErr;
 
+    triggerOrderEmail(updatedOrder, 'return_requested', reason).catch(err => console.error('Error triggering return requested email:', err));
+    sendPushNotification(updatedOrder.email, 'Return Requested ↩️', `Your return request for Order #${updatedOrder.order_id} has been submitted.`, `/account/orders/${updatedOrder.id}`).catch(() => {});
+
     return c.json(formatOrderForFrontend(updatedOrder));
   } catch (err) {
     console.error('request return error:', err);
@@ -762,6 +1007,9 @@ router.post('/:id/exchange', userAuthMiddleware, async (c) => {
       .single();
 
     if (updateErr) throw updateErr;
+
+    triggerOrderEmail(updatedOrder, 'exchange_requested', reason).catch(err => console.error('Error triggering exchange requested email:', err));
+    sendPushNotification(updatedOrder.email, 'Exchange Requested 🔄', `Your exchange request for Order #${updatedOrder.order_id} has been submitted.`, `/account/orders/${updatedOrder.id}`).catch(() => {});
 
     return c.json(formatOrderForFrontend(updatedOrder));
   } catch (err) {
@@ -852,6 +1100,23 @@ router.post('/notify-abandoned', optionalAuth, async (c) => {
 
     await sendEmail({ to: 'support@vanelvina.com', subject, html });
     console.log(`Abandoned checkout email sent to support@vanelvina.com for ${customerEmail}`);
+
+    sendPushNotification(
+      'admin', 
+      '⚠️ Abandoned Checkout Alert', 
+      `${customerName} abandoned checkout for ₹${(total || 0).toLocaleString('en-IN')}`, 
+      '/admin/dashboard'
+    ).catch(() => {});
+
+    if (customerEmail && customerEmail !== 'N/A' && customerEmail !== 'anonymous@vanelvina.com') {
+      sendPushNotification(
+        customerEmail, 
+        '🛍️ Items are waiting in your bag!', 
+        'Finish your checkout now to secure your items before they sell out.', 
+        '/bag'
+      ).catch(() => {});
+    }
+
     return c.json({ success: true, message: 'Notification sent successfully' });
   } catch (err: any) {
     console.error('notify-abandoned error:', err);
