@@ -1,7 +1,8 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import Admin from '../models/Admin.js';
+import { supabase } from '../utils/supabase.js';
+import { toUUID } from '../utils/uuid.js';
 import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
@@ -14,7 +15,13 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const admin = await Admin.findOne({ username });
+    const { data: admin, error } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('username', username)
+      .maybeSingle();
+
+    if (error) throw error;
     if (!admin) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -25,7 +32,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: admin._id, username: admin.username },
+      { id: admin.id, _id: admin.id, username: admin.username },
       process.env.JWT_SECRET || 'van_elvina_super_secret_jwt_key_2026',
       { expiresIn: '7d' }
     );
@@ -33,7 +40,8 @@ router.post('/login', async (req, res) => {
     return res.json({
       token,
       admin: {
-        id: admin._id,
+        _id: admin.id,
+        id: admin.id,
         username: admin.username
       }
     });

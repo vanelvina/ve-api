@@ -1,10 +1,10 @@
-import express from 'express';
-import { supabase } from '../utils/supabase.js';
+import { Hono } from 'https://deno.land/x/hono@v3.11.7/mod.ts';
+import { supabase } from '../utils/supabase.ts';
 
-const router = express.Router();
+const router = new Hono();
 
 // Helper to map Supabase Review row (with joined users and products) to Frontend format
-const mapReviewFromSupabase = (row) => {
+const mapReviewFromSupabase = (row: any) => {
   if (!row) return null;
   return {
     _id: row.id,
@@ -26,7 +26,7 @@ const mapReviewFromSupabase = (row) => {
 };
 
 // GET all reviews
-router.get('/', async (req, res) => {
+router.get('/', async (c) => {
   try {
     const { data, error } = await supabase
       .from('reviews')
@@ -35,9 +35,9 @@ router.get('/', async (req, res) => {
 
     if (error) throw error;
 
-    res.json((data || []).map(mapReviewFromSupabase));
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    return c.json((data || []).map(mapReviewFromSupabase));
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
   }
 });
 

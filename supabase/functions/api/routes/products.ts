@@ -1,12 +1,12 @@
-import express from 'express';
-import { supabase } from '../utils/supabase.js';
-import { toUUID, fromUUID } from '../utils/uuid.js';
-import authMiddleware from '../middleware/auth.js';
+import { Hono } from 'https://deno.land/x/hono@v3.11.7/mod.ts';
+import { supabase } from '../utils/supabase.ts';
+import { toUUID, fromUUID } from '../utils/uuid.ts';
+import { authMiddleware } from '../middleware/auth.ts';
 
-const router = express.Router();
+const router = new Hono();
 
 // Helper to map Supabase Product row to Frontend expected camelCase format
-const mapProductFromSupabase = (prod) => {
+const mapProductFromSupabase = (prod: any) => {
   if (!prod) return null;
   return {
     _id: prod.id,
@@ -27,7 +27,7 @@ const mapProductFromSupabase = (prod) => {
     reviewCount: prod.review_count || 0,
     badge: prod.badge || null,
     tags: prod.tags || [],
-    variants: (prod.variants || []).map(v => ({
+    variants: (prod.variants || []).map((v: any) => ({
       _id: v.id || undefined,
       id: v.id || undefined,
       color: v.color || '',
@@ -46,7 +46,7 @@ const mapProductFromSupabase = (prod) => {
     features: prod.features || [],
     additionalInfo: prod.additional_info || '',
     descriptiveImages: prod.descriptive_images || [],
-    faqs: (prod.faqs || []).map(f => ({
+    faqs: (prod.faqs || []).map((f: any) => ({
       question: f.question || '',
       answer: f.answer || ''
     })),
@@ -60,8 +60,8 @@ const mapProductFromSupabase = (prod) => {
 };
 
 // Helper to map Frontend Product payload to Supabase snake_case schema
-const mapProductToSupabase = (body) => {
-  const payload = {};
+const mapProductToSupabase = (body: any) => {
+  const payload: any = {};
   if (body.id !== undefined) payload.id = toUUID(body.id);
   else if (body._id !== undefined) payload.id = toUUID(body._id);
   
@@ -82,7 +82,7 @@ const mapProductToSupabase = (body) => {
   if (body.badge !== undefined) payload.badge = body.badge;
   if (body.tags !== undefined) payload.tags = body.tags;
   if (body.variants !== undefined) {
-    payload.variants = (body.variants || []).map(v => ({
+    payload.variants = (body.variants || []).map((v: any) => ({
       id: v.id ? toUUID(v.id) : (v._id ? toUUID(v._id) : undefined),
       color: v.color || '',
       colorHex: v.colorHex || '',
@@ -102,7 +102,7 @@ const mapProductToSupabase = (body) => {
   if (body.additionalInfo !== undefined) payload.additional_info = body.additionalInfo;
   if (body.descriptiveImages !== undefined) payload.descriptive_images = body.descriptiveImages;
   if (body.faqs !== undefined) {
-    payload.faqs = (body.faqs || []).map(f => ({
+    payload.faqs = (body.faqs || []).map((f: any) => ({
       question: f.question || '',
       answer: f.answer || ''
     }));
@@ -122,7 +122,7 @@ async function updateCategoryProductCounts() {
       .select('id, name');
     if (catError) throw catError;
 
-    for (const cat of categories) {
+    for (const cat of categories || []) {
       if (!cat.name) continue;
       
       const { count, error: countError } = await supabase
@@ -145,23 +145,24 @@ async function updateCategoryProductCounts() {
 }
 
 // GET all products
-router.get('/', async (req, res) => {
+router.get('/', async (c) => {
   try {
     const { data, error } = await supabase
       .from('products')
       .select('*');
 
     if (error) throw error;
-    res.json((data || []).map(mapProductFromSupabase));
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    return c.json((data || []).map(mapProductFromSupabase));
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
   }
 });
 
 // POST add new product
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, async (c) => {
   try {
-    const payload = mapProductToSupabase(req.body);
+    const body = await c.req.json().catch(() => ({}));
+    const payload = mapProductToSupabase(body);
     const { data, error } = await supabase
       .from('products')
       .insert(payload)
@@ -170,17 +171,19 @@ router.post('/', authMiddleware, async (req, res) => {
 
     if (error) throw error;
     await updateCategoryProductCounts();
-    res.status(201).json(mapProductFromSupabase(data));
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+    return c.json(mapProductFromSupabase(data), 201);
+  } catch (error: any) {
+    return c.json({ message: error.message }, 400);
   }
 });
 
 // PUT update product
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, async (c) => {
   try {
-    const uuid = toUUID(req.params.id);
-    const payload = mapProductToSupabase(req.body);
+    const id = c.req.param('id');
+    const uuid = toUUID(id);
+    const body = await c.req.json().catch(() => ({}));
+    const payload = mapProductToSupabase(body);
     const { data, error } = await supabase
       .from('products')
       .update(payload)
@@ -189,19 +192,20 @@ router.put('/:id', authMiddleware, async (req, res) => {
       .maybeSingle();
 
     if (error) throw error;
-    if (!data) return res.status(404).json({ message: 'Product not found' });
+    if (!data) return c.json({ message: 'Product not found' }, 404);
     
     await updateCategoryProductCounts();
-    res.json(mapProductFromSupabase(data));
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+    return c.json(mapProductFromSupabase(data));
+  } catch (error: any) {
+    return c.json({ message: error.message }, 400);
   }
 });
 
 // DELETE product
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, async (c) => {
   try {
-    const uuid = toUUID(req.params.id);
+    const id = c.req.param('id');
+    const uuid = toUUID(id);
     const { data, error } = await supabase
       .from('products')
       .delete()
@@ -210,12 +214,12 @@ router.delete('/:id', authMiddleware, async (req, res) => {
       .maybeSingle();
 
     if (error) throw error;
-    if (!data) return res.status(404).json({ message: 'Product not found' });
+    if (!data) return c.json({ message: 'Product not found' }, 404);
 
     await updateCategoryProductCounts();
-    res.json({ message: 'Product deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    return c.json({ message: 'Product deleted successfully' });
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
   }
 });
 

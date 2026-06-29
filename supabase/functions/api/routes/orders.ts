@@ -1,17 +1,16 @@
-import express from 'express';
-import { supabase } from '../utils/supabase.js';
-import { toUUID } from '../utils/uuid.js';
-import userAuth from '../middleware/userAuth.js';
-import adminAuth from '../middleware/auth.js';
-import Razorpay from 'razorpay';
-import crypto from 'crypto';
-import jwt from 'jsonwebtoken';
-import { sendEmail } from '../utils/email.js';
+import { Hono } from 'https://deno.land/x/hono@v3.11.7/mod.ts';
+import { supabase } from '../utils/supabase.ts';
+import { toUUID } from '../utils/uuid.ts';
+import { userAuthMiddleware, authMiddleware } from '../middleware/auth.ts';
+import Razorpay from 'npm:razorpay';
+import crypto from 'node:crypto';
+import jwt from 'npm:jsonwebtoken';
+import { sendEmail } from '../utils/email.ts';
 
-const router = express.Router();
+const router = new Hono();
 
 // Helper: Format Order for Frontend compatibility (renames properties to camelCase)
-function formatOrderForFrontend(order) {
+function formatOrderForFrontend(order: any) {
   if (!order) return null;
   return {
     ...order,
@@ -21,7 +20,7 @@ function formatOrderForFrontend(order) {
     paymentMethod: order.payment_method,
     paymentStatus: order.payment_status,
     orderStatus: order.order_status,
-    statusHistory: (order.status_history || []).map(h => ({
+    statusHistory: (order.status_history || []).map((h: any) => ({
       status: h.status,
       timestamp: h.timestamp || h.createdAt,
       note: h.note || ''
@@ -38,7 +37,7 @@ function formatOrderForFrontend(order) {
   };
 }
 
-const getOrderCustomerInfo = async (order) => {
+const getOrderCustomerInfo = async (order: any) => {
   let email = '';
   let name = '';
 
@@ -71,7 +70,7 @@ const getOrderCustomerInfo = async (order) => {
   return { email: email?.toLowerCase().trim(), name };
 };
 
-const triggerOrderEmail = async (order, type, note = '') => {
+const triggerOrderEmail = async (order: any, type: string, note = '') => {
   try {
     const customer = await getOrderCustomerInfo(order);
     if (!customer.email) {
@@ -80,6 +79,7 @@ const triggerOrderEmail = async (order, type, note = '') => {
     }
 
     const orderFormatted = formatOrderForFrontend(order);
+    if (!orderFormatted) return;
 
     let subject = '';
     let htmlContent = '';
@@ -112,7 +112,7 @@ const triggerOrderEmail = async (order, type, note = '') => {
                     </tr>
                   </thead>
                   <tbody>
-                    ${orderFormatted.items.map(item => `
+                    ${orderFormatted.items.map((item: any) => `
                       <tr style="border-bottom: 1px solid rgba(232, 197, 202, 0.3);">
                         <td style="padding: 8px 0; color: #555;">${item.name} ${item.size ? `(Size: ${item.size})` : ''}</td>
                         <td style="padding: 8px 0; text-align: center; color: #555;">${item.quantity}</td>
@@ -194,13 +194,69 @@ const triggerOrderEmail = async (order, type, note = '') => {
       console.log(`Order email notification sent successfully to ${customer.email} for order ${order.order_id} (${type}).`);
 
       if (type === 'confirmed') {
-        const supportSubject = `New Order Received: ${orderFormatted.orderId}`;
+        const supportSubject = `New Order Received: ${orderFormatted.orderId} - Van Elvina`;
         const supportHtml = `
-          <div style="font-family: Arial, sans-serif; padding: 20px;">
-            <h2 style="color: #8A4F5A;">New Order Received</h2>
-            <p>A new order <strong>${orderFormatted.orderId}</strong> has just been placed by <strong>${customer.name || 'Customer'}</strong> (${customer.email}).</p>
-            <p><strong>Order Total:</strong> ₹${orderFormatted.total.toLocaleString('en-IN')}</p>
-            <p>Please check the <a href="${process.env.APP_URL || 'http://localhost:3000'}/admin/dashboard">admin dashboard</a> for full details.</p>
+          <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; color: #333; max-width: 650px; margin: 0 auto; border: 1px solid #E8C5CA; border-radius: 12px;">
+            <h2 style="color: #8A4F5A; border-bottom: 2px solid #8A4F5A; padding-bottom: 8px; margin-top: 0;">New Order Received! 🎉</h2>
+            <p>A new order has been placed on Van Elvina.</p>
+            
+            <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Customer Details</h3>
+            <p style="margin: 8px 0;">
+              <strong>Name:</strong> ${customer.name || 'N/A'}<br/>
+              <strong>Email:</strong> ${customer.email || 'N/A'}
+            </p>
+
+            <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Shipping Address</h3>
+            <p style="margin: 8px 0;">
+              <strong>Name:</strong> ${orderFormatted.shippingAddress.name}<br/>
+              <strong>Phone:</strong> ${orderFormatted.shippingAddress.phone}<br/>
+              <strong>Address:</strong> ${orderFormatted.shippingAddress.line1}${orderFormatted.shippingAddress.line2 ? `, ${orderFormatted.shippingAddress.line2}` : ''}<br/>
+              <strong>City/State/Zip:</strong> ${orderFormatted.shippingAddress.city}, ${orderFormatted.shippingAddress.state} - ${orderFormatted.shippingAddress.pincode}
+            </p>
+
+            <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Order Items</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+              <thead>
+                <tr style="background-color: #FAF0F1; border-bottom: 1px solid #E8C5CA; text-align: left;">
+                  <th style="padding: 10px; font-weight: bold;">Product Name</th>
+                  <th style="padding: 10px; font-weight: bold;">Variant/Color</th>
+                  <th style="padding: 10px; font-weight: bold; text-align: center;">Size</th>
+                  <th style="padding: 10px; font-weight: bold; text-align: center;">Qty</th>
+                  <th style="padding: 10px; font-weight: bold; text-align: right;">Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${orderFormatted.items.map((item: any) => `
+                  <tr style="border-bottom: 1px solid rgba(232, 197, 202, 0.3);">
+                    <td style="padding: 10px; font-size: 13px;">${item.name}</td>
+                    <td style="padding: 10px; font-size: 13px;">${item.color || 'N/A'}</td>
+                    <td style="padding: 10px; font-size: 13px; text-align: center;">${item.size || 'Standard'}</td>
+                    <td style="padding: 10px; font-size: 13px; text-align: center;">${item.quantity}</td>
+                    <td style="padding: 10px; font-size: 13px; text-align: right;">₹${item.price.toLocaleString('en-IN')}</td>
+                  </tr>
+                `).join('')}
+                <tr style="font-weight: bold;">
+                  <td colspan="4" style="padding: 10px 10px 0; text-align: left; font-size: 13px;">Subtotal</td>
+                  <td style="padding: 10px 10px 0; text-align: right; font-size: 13px;">₹${orderFormatted.subtotal.toLocaleString('en-IN')}</td>
+                </tr>
+                <tr style="font-weight: bold;">
+                  <td colspan="4" style="padding: 5px 10px 0; text-align: left; font-size: 13px;">Shipping Fee</td>
+                  <td style="padding: 5px 10px 0; text-align: right; font-size: 13px;">₹${orderFormatted.shippingFee.toLocaleString('en-IN')}</td>
+                </tr>
+                <tr style="font-weight: bold;">
+                  <td colspan="4" style="padding: 5px 10px 0; text-align: left; font-size: 13px;">Discount</td>
+                  <td style="padding: 5px 10px 0; text-align: right; font-size: 13px;">-₹${orderFormatted.discount.toLocaleString('en-IN')}</td>
+                </tr>
+                <tr style="font-weight: bold; font-size: 15px; color: #8A4F5A;">
+                  <td colspan="4" style="padding: 10px; border-top: 2px solid #8A4F5A; text-align: left;">Total Paid</td>
+                  <td style="padding: 10px; border-top: 2px solid #8A4F5A; text-align: right;">₹${orderFormatted.total.toLocaleString('en-IN')}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <p style="margin-top: 30px; text-align: center;">
+              <a href="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/admin/dashboard" style="background-color: #8A4F5A; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Manage Order on Admin Dashboard</a>
+            </p>
           </div>
         `;
         await sendEmail({ to: 'support@vanelvina.com', subject: supportSubject, html: supportHtml });
@@ -212,15 +268,16 @@ const triggerOrderEmail = async (order, type, note = '') => {
   }
 };
 
-const optionalAuth = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
+const optionalAuth = async (c: any, next: () => Promise<void>) => {
+  const authHeader = c.req.header('authorization');
   const token = authHeader && authHeader.split(' ')[1];
   if (token) {
     try {
-      req.user = jwt.verify(token, process.env.USER_JWT_SECRET || 've_user_jwt_secret_vanelvina_2026_secure');
+      const decoded = jwt.verify(token, Deno.env.get('USER_JWT_SECRET') || 've_user_jwt_secret_vanelvina_2026_secure');
+      c.set('user', decoded);
     } catch (err) {}
   }
-  next();
+  await next();
 };
 
 const generateOrderId = () => {
@@ -233,24 +290,30 @@ const generateOrderId = () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/orders — Place a new order (COD)
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/', optionalAuth, async (req, res) => {
+router.post('/', optionalAuth, async (c) => {
   try {
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
     const {
       items, shippingAddress, paymentMethod, shippingMethod,
       subtotal, shippingFee, discount, total, guestInfo
-    } = req.body;
+    } = body;
 
     if (!items?.length) {
-      return res.status(400).json({ message: 'Cart is empty' });
+      return c.json({ message: 'Cart is empty' }, 400);
     }
     if (!shippingAddress?.name || !shippingAddress?.line1 || !shippingAddress?.city) {
-      return res.status(400).json({ message: 'Shipping address is required' });
+      return c.json({ message: 'Shipping address is required' }, 400);
     }
     if (!paymentMethod) {
-      return res.status(400).json({ message: 'Payment method is required' });
+      return c.json({ message: 'Payment method is required' }, 400);
     }
 
-    const mappedItems = items.map(item => ({
+    const mappedItems = items.map((item: any) => ({
       productId: toUUID(item.productId || item._id),
       name: item.name,
       price: item.price,
@@ -260,9 +323,11 @@ router.post('/', optionalAuth, async (req, res) => {
       image: item.image || ''
     }));
 
+    const userPayload = c.get('user');
+
     const orderPayload = {
       order_id: generateOrderId(),
-      user_id: req.user ? toUUID(req.user.id) : null,
+      user_id: userPayload ? toUUID(userPayload.id) : null,
       items: mappedItems,
       shipping_address: shippingAddress,
       payment_method: paymentMethod || 'cod',
@@ -288,30 +353,36 @@ router.post('/', optionalAuth, async (req, res) => {
     // Trigger order confirmation email notification
     triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering COD order email:', err));
 
-    return res.status(201).json({
+    return c.json({
       success: true,
       orderId: order.order_id,
       order: formatOrderForFrontend(order),
-    });
+    }, 201);
   } catch (err) {
     console.error('Place order error:', err);
-    return res.status(500).json({ message: 'Failed to place order' });
+    return c.json({ message: 'Failed to place order' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/orders/create-razorpay-order
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/create-razorpay-order', optionalAuth, async (req, res) => {
+router.post('/create-razorpay-order', optionalAuth, async (c) => {
   try {
-    const { amount } = req.body;
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const { amount } = body;
     if (!amount) {
-      return res.status(400).json({ message: 'Amount is required' });
+      return c.json({ message: 'Amount is required' }, 400);
     }
 
     const instance = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID || 'TEST_KEY_ID',
-      key_secret: process.env.RAZORPAY_KEY_SECRET || 'TEST_KEY_SECRET',
+      key_id: Deno.env.get('RAZORPAY_KEY_ID') || 'TEST_KEY_ID',
+      key_secret: Deno.env.get('RAZORPAY_KEY_SECRET') || 'TEST_KEY_SECRET',
     });
 
     const options = {
@@ -321,36 +392,42 @@ router.post('/create-razorpay-order', optionalAuth, async (req, res) => {
     };
 
     const order = await instance.orders.create(options);
-    if (!order) return res.status(500).json({ message: "Some error occurred" });
+    if (!order) return c.json({ message: "Some error occurred" }, 500);
 
-    res.json(order);
+    return c.json(order);
   } catch (error) {
     console.error('Razorpay create order error:', error);
-    res.status(500).json({ message: "Internal Server Error" });
+    return c.json({ message: "Internal Server Error" }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/orders/verify-payment
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/verify-payment', optionalAuth, async (req, res) => {
+router.post('/verify-payment', optionalAuth, async (c) => {
   try {
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
       items, shippingAddress, paymentMethod, shippingMethod,
       subtotal, shippingFee, discount, total, guestInfo
-    } = req.body;
+    } = body;
 
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || 'TEST_KEY_SECRET')
+      .createHmac("sha256", Deno.env.get('RAZORPAY_KEY_SECRET') || 'TEST_KEY_SECRET')
       .update(sign.toString())
       .digest("hex");
 
     if (razorpay_signature === expectedSign) {
-      const mappedItems = items.map(item => ({
+      const mappedItems = items.map((item: any) => ({
         productId: toUUID(item.productId || item._id),
         name: item.name,
         price: item.price,
@@ -360,9 +437,11 @@ router.post('/verify-payment', optionalAuth, async (req, res) => {
         image: item.image || ''
       }));
 
+      const userPayload = c.get('user');
+
       const orderPayload = {
         order_id: generateOrderId(),
-        user_id: req.user ? toUUID(req.user.id) : null,
+        user_id: userPayload ? toUUID(userPayload.id) : null,
         items: mappedItems,
         shipping_address: shippingAddress,
         payment_method: paymentMethod || 'razorpay',
@@ -391,28 +470,29 @@ router.post('/verify-payment', optionalAuth, async (req, res) => {
       // Trigger order confirmation email notification
       triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering payment-confirmed order email:', err));
 
-      return res.status(200).json({
+      return c.json({
         success: true,
         message: "Payment verified successfully",
         orderId: order.order_id,
         order: formatOrderForFrontend(order)
       });
     } else {
-      return res.status(400).json({ message: "Invalid signature sent!" });
+      return c.json({ message: "Invalid signature sent!" }, 400);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Razorpay verify payment error:', error);
-    res.status(500).json({ message: "Internal Server Error!" });
+    return c.json({ message: error.message || "Internal Server Error!" }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/orders/my
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/my', userAuth, async (req, res) => {
+router.get('/my', userAuthMiddleware, async (c) => {
   try {
-    const userId = toUUID(req.user.id);
-    const userEmail = req.user.email?.toLowerCase().trim();
+    const userPayload = c.get('user');
+    const userId = toUUID(userPayload.id);
+    const userEmail = userPayload.email?.toLowerCase().trim();
     
     let selectQuery = supabase.from('orders').select('*');
     
@@ -426,19 +506,19 @@ router.get('/my', userAuth, async (req, res) => {
 
     if (error) throw error;
 
-    return res.json((orders || []).map(formatOrderForFrontend));
+    return c.json((orders || []).map(formatOrderForFrontend));
   } catch (err) {
     console.error('fetch my orders error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return c.json({ message: 'Server error' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/orders/:id — Get a specific order by order_id or UUID
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (c) => {
   try {
-    const idParam = req.params.id;
+    const idParam = c.req.param('id');
     let selectQuery = supabase.from('orders').select('*');
     
     if (idParam.startsWith('VE-')) {
@@ -451,21 +531,23 @@ router.get('/:id', async (req, res) => {
 
     if (error) throw error;
     if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
+      return c.json({ message: 'Order not found' }, 404);
     }
-    return res.json(formatOrderForFrontend(order));
+    return c.json(formatOrderForFrontend(order));
   } catch (err) {
     console.error('get order error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return c.json({ message: 'Server error' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/orders — Admin: get all orders with pagination
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/', adminAuth, async (req, res) => {
+router.get('/', authMiddleware, async (c) => {
   try {
-    const { status, page = 1, limit = 50 } = req.query;
+    const status = c.req.query('status');
+    const page = c.req.query('page') || '1';
+    const limit = c.req.query('limit') || '50';
     const offset = (Number(page) - 1) * Number(limit);
     
     let countQuery = supabase.from('orders').select('*', { count: 'exact', head: true });
@@ -488,7 +570,7 @@ router.get('/', adminAuth, async (req, res) => {
     const total = count || 0;
     const mappedOrders = (orders || []).map(formatOrderForFrontend);
 
-    return res.json({
+    return c.json({
       orders: mappedOrders,
       total,
       page: Number(page),
@@ -496,17 +578,23 @@ router.get('/', adminAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('admin get all orders error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return c.json({ message: 'Server error' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /api/orders/:id/status — Admin: update order status
 // ─────────────────────────────────────────────────────────────────────────────
-router.put('/:id/status', adminAuth, async (req, res) => {
+router.put('/:id/status', authMiddleware, async (c) => {
   try {
-    const { orderStatus, paymentStatus, note } = req.body;
-    const orderId = toUUID(req.params.id);
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const { orderStatus, paymentStatus, note } = body;
+    const orderId = toUUID(c.req.param('id'));
 
     const { data: order, error: fetchErr } = await supabase
       .from('orders')
@@ -515,9 +603,9 @@ router.put('/:id/status', adminAuth, async (req, res) => {
       .maybeSingle();
 
     if (fetchErr) throw fetchErr;
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (!order) return c.json({ message: 'Order not found' }, 404);
 
-    const updatePayload = {};
+    const updatePayload: any = {};
     let statusChanged = false;
 
     if (orderStatus && order.order_status !== orderStatus) {
@@ -549,21 +637,28 @@ router.put('/:id/status', adminAuth, async (req, res) => {
       triggerOrderEmail(updatedOrder, 'status_updated', note).catch(err => console.error('Error triggering status update email:', err));
     }
 
-    return res.json(formatOrderForFrontend(updatedOrder));
+    return c.json(formatOrderForFrontend(updatedOrder));
   } catch (err) {
     console.error('update order status error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return c.json({ message: 'Server error' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/orders/:id/return — Request a return
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/:id/return', userAuth, async (req, res) => {
+router.post('/:id/return', userAuthMiddleware, async (c) => {
   try {
-    const { reason } = req.body;
-    const orderId = toUUID(req.params.id);
-    const userId = toUUID(req.user.id);
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      body = {};
+    }
+    const { reason } = body;
+    const orderId = toUUID(c.req.param('id'));
+    const userPayload = c.get('user');
+    const userId = toUUID(userPayload.id);
 
     const { data: order, error: fetchErr } = await supabase
       .from('orders')
@@ -573,17 +668,17 @@ router.post('/:id/return', userAuth, async (req, res) => {
       .maybeSingle();
 
     if (fetchErr) throw fetchErr;
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (!order) return c.json({ message: 'Order not found' }, 404);
 
     if (order.order_status !== 'delivered') {
-      return res.status(400).json({ message: 'Only delivered orders can be returned' });
+      return c.json({ message: 'Only delivered orders can be returned' }, 400);
     }
 
-    const deliveredEntry = (order.status_history || []).slice().reverse().find(h => h.status === 'delivered');
+    const deliveredEntry = (order.status_history || []).slice().reverse().find((h: any) => h.status === 'delivered');
     const deliveredDate = deliveredEntry ? deliveredEntry.timestamp : order.updated_at;
     
     if (Date.now() - new Date(deliveredDate).getTime() > 7 * 24 * 60 * 60 * 1000) {
-      return res.status(400).json({ message: 'Return window (7 days) has expired' });
+      return c.json({ message: 'Return window (7 days) has expired' }, 400);
     }
 
     const newHistory = [...(order.status_history || [])];
@@ -605,21 +700,28 @@ router.post('/:id/return', userAuth, async (req, res) => {
 
     if (updateErr) throw updateErr;
 
-    return res.json(formatOrderForFrontend(updatedOrder));
+    return c.json(formatOrderForFrontend(updatedOrder));
   } catch (err) {
     console.error('request return error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return c.json({ message: 'Server error' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/orders/:id/exchange — Request an exchange
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/:id/exchange', userAuth, async (req, res) => {
+router.post('/:id/exchange', userAuthMiddleware, async (c) => {
   try {
-    const { reason } = req.body;
-    const orderId = toUUID(req.params.id);
-    const userId = toUUID(req.user.id);
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      body = {};
+    }
+    const { reason } = body;
+    const orderId = toUUID(c.req.param('id'));
+    const userPayload = c.get('user');
+    const userId = toUUID(userPayload.id);
 
     const { data: order, error: fetchErr } = await supabase
       .from('orders')
@@ -629,17 +731,17 @@ router.post('/:id/exchange', userAuth, async (req, res) => {
       .maybeSingle();
 
     if (fetchErr) throw fetchErr;
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (!order) return c.json({ message: 'Order not found' }, 404);
 
     if (order.order_status !== 'delivered') {
-      return res.status(400).json({ message: 'Only delivered orders can be exchanged' });
+      return c.json({ message: 'Only delivered orders can be exchanged' }, 400);
     }
 
-    const deliveredEntry = (order.status_history || []).slice().reverse().find(h => h.status === 'delivered');
+    const deliveredEntry = (order.status_history || []).slice().reverse().find((h: any) => h.status === 'delivered');
     const deliveredDate = deliveredEntry ? deliveredEntry.timestamp : order.updated_at;
     
     if (Date.now() - new Date(deliveredDate).getTime() > 7 * 24 * 60 * 60 * 1000) {
-      return res.status(400).json({ message: 'Exchange window (7 days) has expired' });
+      return c.json({ message: 'Exchange window (7 days) has expired' }, 400);
     }
 
     const newHistory = [...(order.status_history || [])];
@@ -661,10 +763,99 @@ router.post('/:id/exchange', userAuth, async (req, res) => {
 
     if (updateErr) throw updateErr;
 
-    return res.json(formatOrderForFrontend(updatedOrder));
+    return c.json(formatOrderForFrontend(updatedOrder));
   } catch (err) {
     console.error('request exchange error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return c.json({ message: 'Server error' }, 500);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/orders/notify-abandoned — Notify admin about abandoned checkout
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/notify-abandoned', optionalAuth, async (c) => {
+  try {
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+
+    const { items, shippingAddress, total, reason, guestInfo } = body;
+    
+    // Get customer name & email
+    const userPayload = c.get('user');
+    let customerName = userPayload?.name || guestInfo?.name || 'Guest Customer';
+    let customerEmail = userPayload?.email || guestInfo?.email || 'N/A';
+    let customerPhone = userPayload?.phone || guestInfo?.phone || shippingAddress?.phone || 'N/A';
+
+    const subject = `⚠️ Abandoned Checkout / Failed Payment - Van Elvina`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; color: #333; max-width: 650px; margin: 0 auto; border: 1px solid #E8C5CA; border-radius: 12px;">
+        <h2 style="color: #c23b22; border-bottom: 2px solid #c23b22; padding-bottom: 8px; margin-top: 0;">Abandoned Checkout / Failed Payment Alert ⚠️</h2>
+        <p>A customer attempted to checkout but did not complete the payment.</p>
+        
+        <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Reason / Event</h3>
+        <p style="margin: 8px 0; color: #c23b22; font-weight: bold;">
+          ${reason || 'Unknown reason / payment cancelled'}
+        </p>
+
+        <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Customer Details</h3>
+        <p style="margin: 8px 0;">
+          <strong>Name:</strong> ${customerName}<br/>
+          <strong>Email:</strong> ${customerEmail}<br/>
+          <strong>Phone:</strong> ${customerPhone}
+        </p>
+
+        ${shippingAddress ? `
+          <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Shipping Address Provided</h3>
+          <p style="margin: 8px 0;">
+            <strong>Name:</strong> ${shippingAddress.name || 'N/A'}<br/>
+            <strong>Phone:</strong> ${shippingAddress.phone || 'N/A'}<br/>
+            <strong>Address:</strong> ${shippingAddress.line1 || ''}${shippingAddress.line2 ? `, ${shippingAddress.line2}` : ''}<br/>
+            <strong>City/State/Zip:</strong> ${shippingAddress.city || ''}, ${shippingAddress.state || ''} - ${shippingAddress.pincode || ''}
+          </p>
+        ` : ''}
+
+        ${items && items.length > 0 ? `
+          <h3 style="color: #8A4F5A; margin-top: 24px; border-bottom: 1px solid #FAF0F1; padding-bottom: 4px;">Cart Items</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <thead>
+              <tr style="background-color: #FAF0F1; border-bottom: 1px solid #E8C5CA; text-align: left;">
+                <th style="padding: 10px; font-weight: bold;">Product Name</th>
+                <th style="padding: 10px; font-weight: bold;">Variant/Color</th>
+                <th style="padding: 10px; font-weight: bold; text-align: center;">Size</th>
+                <th style="padding: 10px; font-weight: bold; text-align: center;">Qty</th>
+                <th style="padding: 10px; font-weight: bold; text-align: right;">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((item: any) => `
+                <tr style="border-bottom: 1px solid rgba(232, 197, 202, 0.3);">
+                  <td style="padding: 10px; font-size: 13px;">${item.name || item.product?.name || 'N/A'}</td>
+                  <td style="padding: 10px; font-size: 13px;">${item.variantColor || item.color || 'N/A'}</td>
+                  <td style="padding: 10px; font-size: 13px; text-align: center;">${item.size || 'Standard'}</td>
+                  <td style="padding: 10px; font-size: 13px; text-align: center;">${item.quantity}</td>
+                  <td style="padding: 10px; font-size: 13px; text-align: right;">₹${((item.price || item.product?.price || 0) * item.quantity).toLocaleString('en-IN')}</td>
+                </tr>
+              `).join('')}
+              <tr style="font-weight: bold; font-size: 15px; color: #8A4F5A;">
+                <td colspan="4" style="padding: 10px; border-top: 2px solid #8A4F5A; text-align: left;">Cart Total Value</td>
+                <td style="padding: 10px; border-top: 2px solid #8A4F5A; text-align: right;">₹${(total || 0).toLocaleString('en-IN')}</td>
+              </tr>
+            </tbody>
+          </table>
+        ` : ''}
+      </div>
+    `;
+
+    await sendEmail({ to: 'support@vanelvina.com', subject, html });
+    console.log(`Abandoned checkout email sent to support@vanelvina.com for ${customerEmail}`);
+    return c.json({ success: true, message: 'Notification sent successfully' });
+  } catch (err: any) {
+    console.error('notify-abandoned error:', err);
+    return c.json({ message: 'Server error' }, 500);
   }
 });
 

@@ -1,11 +1,11 @@
-import express from 'express';
-import { supabase } from '../utils/supabase.js';
-import { toUUID } from '../utils/uuid.js';
-import authMiddleware from '../middleware/auth.js';
+import { Hono } from 'https://deno.land/x/hono@v3.11.7/mod.ts';
+import { supabase } from '../utils/supabase.ts';
+import { toUUID } from '../utils/uuid.ts';
+import { authMiddleware } from '../middleware/auth.ts';
 
-const router = express.Router();
+const router = new Hono();
 
-const DEFAULT_SUBCATEGORIES = {
+const DEFAULT_SUBCATEGORIES: Record<string, any[]> = {
   "bras": [
     { "id": "sub001", "name": "T-Shirt Bras", "slug": "t-shirt-bras" },
     { "id": "sub002", "name": "Push-Up Bras", "slug": "push-up-bras" },
@@ -48,7 +48,7 @@ const DEFAULT_SUBCATEGORIES = {
 };
 
 // GET all categories
-router.get('/', async (req, res) => {
+router.get('/', async (c) => {
   try {
     const { data, error } = await supabase
       .from('categories')
@@ -56,7 +56,7 @@ router.get('/', async (req, res) => {
 
     if (error) throw error;
 
-    const categoriesWithCounts = await Promise.all(data.map(async (row) => {
+    const categoriesWithCounts = await Promise.all(data.map(async (row: any) => {
       const { count } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
@@ -79,21 +79,22 @@ router.get('/', async (req, res) => {
       };
     }));
 
-    res.json(categoriesWithCounts);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    return c.json(categoriesWithCounts);
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
   }
 });
 
 // POST add new category
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, async (c) => {
   try {
+    const body = await c.req.json().catch(() => ({}));
     const payload = {
-      name: req.body.name,
-      slug: req.body.slug,
-      description: req.body.description,
-      image: req.body.image,
-      is_active: req.body.isActive !== false
+      name: body.name,
+      slug: body.slug,
+      description: body.description,
+      image: body.image,
+      is_active: body.isActive !== false
     };
 
     const { data, error } = await supabase
@@ -119,23 +120,25 @@ router.post('/', authMiddleware, async (req, res) => {
       plpBanner: '',
       plpBannerMobile: ''
     };
-    res.status(201).json(mapped);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+    return c.json(mapped, 201);
+  } catch (error: any) {
+    return c.json({ message: error.message }, 400);
   }
 });
 
 // PUT update category
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, async (c) => {
   try {
-    const uuid = toUUID(req.params.id);
-    const payload = {};
-    if (req.body.name !== undefined) payload.name = req.body.name;
-    if (req.body.slug !== undefined) payload.slug = req.body.slug;
-    if (req.body.description !== undefined) payload.description = req.body.description;
-    if (req.body.image !== undefined) payload.image = req.body.image;
-    if (req.body.isActive !== undefined) payload.is_active = req.body.isActive;
-    payload.updated_at = new Date();
+    const id = c.req.param('id');
+    const uuid = toUUID(id);
+    const body = await c.req.json().catch(() => ({}));
+    const payload: any = {};
+    if (body.name !== undefined) payload.name = body.name;
+    if (body.slug !== undefined) payload.slug = body.slug;
+    if (body.description !== undefined) payload.description = body.description;
+    if (body.image !== undefined) payload.image = body.image;
+    if (body.isActive !== undefined) payload.is_active = body.isActive;
+    payload.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase
       .from('categories')
@@ -145,7 +148,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
       .single();
 
     if (error) throw error;
-    if (!data) return res.status(404).json({ message: 'Category not found' });
+    if (!data) return c.json({ message: 'Category not found' }, 404);
 
     // Fetch productCount
     const { count } = await supabase
@@ -168,16 +171,17 @@ router.put('/:id', authMiddleware, async (req, res) => {
       plpBanner: '',
       plpBannerMobile: ''
     };
-    res.json(mapped);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+    return c.json(mapped);
+  } catch (error: any) {
+    return c.json({ message: error.message }, 400);
   }
 });
 
 // DELETE category
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, async (c) => {
   try {
-    const uuid = toUUID(req.params.id);
+    const id = c.req.param('id');
+    const uuid = toUUID(id);
     const { data, error } = await supabase
       .from('categories')
       .delete()
@@ -186,10 +190,10 @@ router.delete('/:id', authMiddleware, async (req, res) => {
       .maybeSingle();
 
     if (error) throw error;
-    if (!data) return res.status(404).json({ message: 'Category not found' });
-    res.json({ message: 'Category deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    if (!data) return c.json({ message: 'Category not found' }, 404);
+    return c.json({ message: 'Category deleted successfully' });
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
   }
 });
 

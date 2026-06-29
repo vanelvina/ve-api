@@ -1,12 +1,12 @@
-import express from 'express';
-import { supabase } from '../utils/supabase.js';
-import { toUUID } from '../utils/uuid.js';
-import authMiddleware from '../middleware/auth.js';
+import { Hono } from 'https://deno.land/x/hono@v3.11.7/mod.ts';
+import { supabase } from '../utils/supabase.ts';
+import { toUUID } from '../utils/uuid.ts';
+import { authMiddleware } from '../middleware/auth.ts';
 
-const router = express.Router();
+const router = new Hono();
 
 // Helper to map Supabase Inquiry row to Frontend expected format
-const mapInquiry = (inquiry) => {
+const mapInquiry = (inquiry: any) => {
   if (!inquiry) return null;
   return {
     _id: inquiry.id,
@@ -23,11 +23,12 @@ const mapInquiry = (inquiry) => {
 };
 
 // POST /api/inquiries — Public: Submit feedback/inquiry
-router.post('/', async (req, res) => {
+router.post('/', async (c) => {
   try {
-    const { name, email, phone, queryType, message } = req.body;
+    const body = await c.req.json().catch(() => ({}));
+    const { name, email, phone, queryType, message } = body;
     if (!name || !email || !phone || !queryType || !message) {
-      return res.status(400).json({ message: 'All fields are required.' });
+      return c.json({ message: 'All fields are required.' }, 400);
     }
 
     const { data: inquiry, error } = await supabase
@@ -45,15 +46,15 @@ router.post('/', async (req, res) => {
 
     if (error) throw error;
 
-    return res.status(201).json({ success: true, inquiry: mapInquiry(inquiry) });
-  } catch (error) {
+    return c.json({ success: true, inquiry: mapInquiry(inquiry) }, 201);
+  } catch (error: any) {
     console.error('Submit inquiry error:', error);
-    return res.status(500).json({ message: 'Server error submitting feedback.' });
+    return c.json({ message: 'Server error submitting feedback.' }, 500);
   }
 });
 
 // GET /api/inquiries — Admin: Retrieve all inquiries
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, async (c) => {
   try {
     const { data, error } = await supabase
       .from('inquiries')
@@ -61,17 +62,18 @@ router.get('/', authMiddleware, async (req, res) => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return res.json(data.map(mapInquiry));
-  } catch (error) {
+    return c.json((data || []).map(mapInquiry));
+  } catch (error: any) {
     console.error('Fetch inquiries error:', error);
-    return res.status(500).json({ message: 'Server error fetching inquiries.' });
+    return c.json({ message: 'Server error fetching inquiries.' }, 500);
   }
 });
 
 // PUT /api/inquiries/:id/resolve — Admin: Mark inquiry as resolved
-router.put('/:id/resolve', authMiddleware, async (req, res) => {
+router.put('/:id/resolve', authMiddleware, async (c) => {
   try {
-    const uuid = toUUID(req.params.id);
+    const id = c.req.param('id');
+    const uuid = toUUID(id);
     
     // Fetch current status
     const { data: currentInq, error: fetchErr } = await supabase
@@ -82,7 +84,7 @@ router.put('/:id/resolve', authMiddleware, async (req, res) => {
 
     if (fetchErr) throw fetchErr;
     if (!currentInq) {
-      return res.status(404).json({ message: 'Inquiry not found.' });
+      return c.json({ message: 'Inquiry not found.' }, 404);
     }
     
     const newStatus = currentInq.status === 'resolved' ? 'pending' : 'resolved';
@@ -97,17 +99,18 @@ router.put('/:id/resolve', authMiddleware, async (req, res) => {
 
     if (updateErr) throw updateErr;
     
-    return res.json(mapInquiry(updatedInq));
-  } catch (error) {
+    return c.json(mapInquiry(updatedInq));
+  } catch (error: any) {
     console.error('Resolve inquiry error:', error);
-    return res.status(500).json({ message: 'Server error updating inquiry status.' });
+    return c.json({ message: 'Server error updating inquiry status.' }, 500);
   }
 });
 
 // DELETE /api/inquiries/:id — Admin: Delete inquiry
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, async (c) => {
   try {
-    const uuid = toUUID(req.params.id);
+    const id = c.req.param('id');
+    const uuid = toUUID(id);
     const { data, error } = await supabase
       .from('inquiries')
       .delete()
@@ -117,12 +120,12 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 
     if (error) throw error;
     if (!data) {
-      return res.status(404).json({ message: 'Inquiry not found.' });
+      return c.json({ message: 'Inquiry not found.' }, 404);
     }
-    return res.json({ success: true, message: 'Inquiry deleted successfully.' });
-  } catch (error) {
+    return c.json({ success: true, message: 'Inquiry deleted successfully.' });
+  } catch (error: any) {
     console.error('Delete inquiry error:', error);
-    return res.status(500).json({ message: 'Server error deleting inquiry.' });
+    return c.json({ message: 'Server error deleting inquiry.' }, 500);
   }
 });
 

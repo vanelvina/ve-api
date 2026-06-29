@@ -1,6 +1,4 @@
-// Force nodemon reload to pick up new MONGODB_URI
 import express from 'express';
-import mongoose from 'mongoose';
 import cors from 'cors';
 import 'dotenv/config';
 import path from 'path';
@@ -36,20 +34,6 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Connect to MongoDB
-const MONGODB_URI = process.env.MONGODB_URI;
-if (!MONGODB_URI) {
-  console.error('CRITICAL: MONGODB_URI is not defined in the environment variables!');
-  process.exit(1);
-}
-
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('MongoDB connected successfully.'))
-  .catch(err => {
-    console.error('WARNING: MongoDB connection failed on startup. The API will start, but database operations will fail.');
-    console.error('Error detail:', err.message);
-  });
-
 // Mount API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/banners', bannerRoutes);
@@ -73,7 +57,7 @@ app.get('/api/health', (req, res) => {
 
 // Generic Error Handler
 app.use((err, req, res, next) => {
-  console.error('Unhanlded Server Error:', err.stack);
+  console.error('Unhandled Server Error:', err.stack);
   res.status(500).json({ message: 'Internal Server Error' });
 });
 

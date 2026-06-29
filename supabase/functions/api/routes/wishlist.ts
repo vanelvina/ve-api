@@ -1,12 +1,12 @@
-import express from 'express';
-import { supabase } from '../utils/supabase.js';
-import { toUUID } from '../utils/uuid.js';
-import userAuth from '../middleware/userAuth.js';
+import { Hono } from 'https://deno.land/x/hono@v3.11.7/mod.ts';
+import { supabase } from '../utils/supabase.ts';
+import { toUUID } from '../utils/uuid.ts';
+import { userAuthMiddleware } from '../middleware/auth.ts';
 
-const router = express.Router();
+const router = new Hono();
 
 // Helper: Format Product for Frontend compatibility
-function formatProductForFrontend(prod) {
+function formatProductForFrontend(prod: any) {
   if (!prod) return null;
   return {
     ...prod,
@@ -25,7 +25,7 @@ function formatProductForFrontend(prod) {
     isReturnable: prod.is_returnable,
     isExchangeable: prod.is_exchangeable,
     isFreeShipping: prod.is_free_shipping,
-    variants: (prod.variants || []).map(v => ({
+    variants: (prod.variants || []).map((v: any) => ({
       ...v,
       _id: v.id
     })),
@@ -35,34 +35,39 @@ function formatProductForFrontend(prod) {
 }
 
 // GET /api/wishlist - Get current user's populated wishlist
-router.get('/', userAuth, async (req, res) => {
+router.get('/', userAuthMiddleware, async (c) => {
   try {
+    const userPayload = c.get('user');
+    const userId = toUUID(userPayload.id);
+
     const { data: dbItems, error } = await supabase
       .from('wishlists')
       .select('*, products(*)')
-      .eq('user_id', toUUID(req.user.id));
+      .eq('user_id', userId);
 
     if (error) throw error;
 
     const products = (dbItems || [])
-      .map(item => formatProductForFrontend(item.products))
-      .filter(p => p !== null);
+      .map((item: any) => formatProductForFrontend(item.products))
+      .filter((p: any) => p !== null);
 
-    res.json(products);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    return c.json(products);
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
   }
 });
 
 // POST /api/wishlist/toggle - Toggle a product in user's wishlist
-router.post('/toggle', userAuth, async (req, res) => {
-  const { productId } = req.body;
-  if (!productId) {
-    return res.status(400).json({ message: 'Product ID is required' });
-  }
-
+router.post('/toggle', userAuthMiddleware, async (c) => {
   try {
-    const userId = toUUID(req.user.id);
+    const body = await c.req.json().catch(() => ({}));
+    const { productId } = body;
+    if (!productId) {
+      return c.json({ message: 'Product ID is required' }, 400);
+    }
+
+    const userPayload = c.get('user');
+    const userId = toUUID(userPayload.id);
     const pId = toUUID(productId);
 
     // Check if item already in wishlist
@@ -83,7 +88,7 @@ router.post('/toggle', userAuth, async (req, res) => {
         .eq('product_id', pId);
 
       if (deleteErr) throw deleteErr;
-      return res.json({ action: 'removed', message: 'Product removed from wishlist' });
+      return c.json({ action: 'removed', message: 'Product removed from wishlist' });
     } else {
       // Verify product exists first
       const { data: productExists, error: productErr } = await supabase
@@ -94,7 +99,7 @@ router.post('/toggle', userAuth, async (req, res) => {
 
       if (productErr) throw productErr;
       if (!productExists) {
-        return res.status(404).json({ message: 'Product not found' });
+        return c.json({ message: 'Product not found' }, 404);
       }
 
       const { error: insertErr } = await supabase
@@ -105,22 +110,24 @@ router.post('/toggle', userAuth, async (req, res) => {
         });
 
       if (insertErr) throw insertErr;
-      return res.json({ action: 'added', message: 'Product added to wishlist' });
+      return c.json({ action: 'added', message: 'Product added to wishlist' });
     }
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
   }
 });
 
 // POST /api/wishlist/merge - Merge multiple products into user's wishlist
-router.post('/merge', userAuth, async (req, res) => {
-  const { productIds } = req.body;
-  if (!Array.isArray(productIds)) {
-    return res.status(400).json({ message: 'productIds array is required' });
-  }
-
+router.post('/merge', userAuthMiddleware, async (c) => {
   try {
-    const userId = toUUID(req.user.id);
+    const body = await c.req.json().catch(() => ({}));
+    const { productIds } = body;
+    if (!Array.isArray(productIds)) {
+      return c.json({ message: 'productIds array is required' }, 400);
+    }
+
+    const userPayload = c.get('user');
+    const userId = toUUID(userPayload.id);
 
     // Get current user's wishlist items
     const { data: existingItems, error: fetchErr } = await supabase
@@ -130,10 +137,10 @@ router.post('/merge', userAuth, async (req, res) => {
 
     if (fetchErr) throw fetchErr;
 
-    const existingProductIds = new Set((existingItems || []).map(item => item.product_id));
+    const existingProductIds = new Set((existingItems || []).map((item: any) => item.product_id));
 
     // Filter out input product IDs that are already in the wishlist
-    const newIdsToTry = [...new Set(productIds.map(toUUID).filter(id => id && !existingProductIds.has(id)))];
+    const newIdsToTry = [...new Set(productIds.map(toUUID).filter((id: any) => id && !existingProductIds.has(id)))];
 
     if (newIdsToTry.length > 0) {
       // Verify which of these products actually exist in database
@@ -145,7 +152,7 @@ router.post('/merge', userAuth, async (req, res) => {
       if (prodErr) throw prodErr;
 
       if (validProducts && validProducts.length > 0) {
-        const insertPayload = validProducts.map(p => ({
+        const insertPayload = validProducts.map((p: any) => ({
           user_id: userId,
           product_id: p.id
         }));
@@ -167,12 +174,12 @@ router.post('/merge', userAuth, async (req, res) => {
     if (finalFetchErr) throw finalFetchErr;
 
     const products = (dbItems || [])
-      .map(item => formatProductForFrontend(item.products))
-      .filter(p => p !== null);
+      .map((item: any) => formatProductForFrontend(item.products))
+      .filter((p: any) => p !== null);
 
-    res.json(products);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    return c.json(products);
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
   }
 });
 

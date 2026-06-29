@@ -1,20 +1,19 @@
-import express from 'express';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import { Resend } from 'resend';
-import { OAuth2Client } from 'google-auth-library';
-import { supabase } from '../utils/supabase.js';
-import { toUUID } from '../utils/uuid.js';
-import userAuth from '../middleware/userAuth.js';
-import adminAuth from '../middleware/auth.js';
-import { sendEmail } from '../utils/email.js';
+import { Hono } from 'https://deno.land/x/hono@v3.11.7/mod.ts';
+import jwt from 'npm:jsonwebtoken';
+import bcrypt from 'npm:bcryptjs';
+import { Resend } from 'npm:resend';
+import { OAuth2Client } from 'npm:google-auth-library';
+import { supabase } from '../utils/supabase.ts';
+import { toUUID } from '../utils/uuid.ts';
+import { userAuthMiddleware, authMiddleware } from '../middleware/auth.ts';
+import { sendEmail } from '../utils/email.ts';
 
-const router = express.Router();
-const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key_for_dev_bypass');
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const router = new Hono();
+const resend = new Resend(Deno.env.get('RESEND_API_KEY') || 're_dummy_key_for_dev_bypass');
+const googleClient = new OAuth2Client(Deno.env.get('GOOGLE_CLIENT_ID'));
 
-const USER_JWT_SECRET = process.env.USER_JWT_SECRET || 've_user_jwt_secret_vanelvina_2026_secure';
-const IS_DEV = process.env.NODE_ENV === 'development';
+const USER_JWT_SECRET = Deno.env.get('USER_JWT_SECRET') || 've_user_jwt_secret_vanelvina_2026_secure';
+const IS_DEV = Deno.env.get('NODE_ENV') === 'development';
 
 // ─── Helper: Generate 6-digit OTP ────────────────────────────────────────────
 const generateOTP = () => {
@@ -22,7 +21,7 @@ const generateOTP = () => {
 };
 
 // ─── Helper: Sign user JWT ────────────────────────────────────────────────────
-const signUserToken = (user) => {
+const signUserToken = (user: any) => {
   return jwt.sign(
     { id: user.id, email: user.email, authMethod: user.auth_method },
     USER_JWT_SECRET,
@@ -31,9 +30,9 @@ const signUserToken = (user) => {
 };
 
 // ─── Helper: Format User profile for Frontend compatibility ───────────────────
-function formatUserForFrontend(user) {
+function formatUserForFrontend(user: any) {
   if (!user) return null;
-  const formatted = {
+  const formatted: any = {
     ...user,
     _id: user.id,
     authMethod: user.auth_method,
@@ -46,7 +45,7 @@ function formatUserForFrontend(user) {
   };
   
   if (user.addresses) {
-    formatted.addresses = user.addresses.map(addr => ({
+    formatted.addresses = user.addresses.map((addr: any) => ({
       _id: addr.id,
       id: addr.id,
       fullName: addr.full_name,
@@ -66,8 +65,8 @@ function formatUserForFrontend(user) {
 }
 
 // ─── Helper: Send OTP via Resend ─────────────────────────────────────────────
-const sendOTPEmail = async (email, otp, name = '') => {
-  if (IS_DEV && process.env.RESEND_API_KEY === 're_placeholder_add_your_resend_key') {
+const sendOTPEmail = async (email: string, otp: string, name = '') => {
+  if (IS_DEV && Deno.env.get('RESEND_API_KEY') === 're_placeholder_add_your_resend_key') {
     console.log(`[DEV] OTP for ${email}: ${otp}`);
     return { success: true };
   }
@@ -108,7 +107,7 @@ const sendOTPEmail = async (email, otp, name = '') => {
     });
     if (error) throw error;
     return { success: true };
-  } catch (err) {
+  } catch (err: any) {
     console.error('Resend error:', err);
     throw new Error('Failed to send verification email');
   }
@@ -117,16 +116,22 @@ const sendOTPEmail = async (email, otp, name = '') => {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/user-auth/send-otp
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/send-otp', async (req, res) => {
+router.post('/send-otp', async (c) => {
   try {
-    const { identifier, type = 'email' } = req.body;
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const { identifier, type = 'email' } = body;
     if (!identifier || type !== 'email') {
-      return res.status(400).json({ message: 'Valid email required' });
+      return c.json({ message: 'Valid email required' }, 400);
     }
 
     const email = identifier.toLowerCase().trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ message: 'Invalid email format' });
+      return c.json({ message: 'Invalid email format' }, 400);
     }
 
     // Generate OTP
@@ -158,26 +163,32 @@ router.post('/send-otp', async (req, res) => {
     // Send email
     await sendOTPEmail(email, rawOtp, existingUser?.name);
 
-    return res.json({
+    return c.json({
       success: true,
       purpose,
       message: `Verification code sent to ${email}`,
       ...(IS_DEV && { _devOtp: rawOtp })
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('send-otp error:', err);
-    return res.status(500).json({ message: err.message || 'Failed to send OTP' });
+    return c.json({ message: err.message || 'Failed to send OTP' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/user-auth/verify-otp
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/verify-otp', async (req, res) => {
+router.post('/verify-otp', async (c) => {
   try {
-    const { identifier, otp, name } = req.body;
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const { identifier, otp, name } = body;
     if (!identifier || !otp) {
-      return res.status(400).json({ message: 'Email and OTP required' });
+      return c.json({ message: 'Email and OTP required' }, 400);
     }
 
     const email = identifier.toLowerCase().trim();
@@ -194,12 +205,12 @@ router.post('/verify-otp', async (req, res) => {
     if (otpFetchErr) throw otpFetchErr;
 
     if (!otpRecord || new Date(otpRecord.expires_at) < new Date()) {
-      return res.status(400).json({ message: 'OTP expired or not found. Please request a new code.' });
+      return c.json({ message: 'OTP expired or not found. Please request a new code.' }, 400);
     }
 
     const isValid = await bcrypt.compare(otp, otpRecord.code);
     if (!isValid) {
-      return res.status(400).json({ message: 'Invalid verification code. Please try again.' });
+      return c.json({ message: 'Invalid verification code. Please try again.' }, 400);
     }
 
     // Delete used OTP
@@ -236,10 +247,10 @@ router.post('/verify-otp', async (req, res) => {
       user = newUser;
     } else {
       if (!user.is_active) {
-        return res.status(403).json({ message: 'Your account has been suspended by the administrator.' });
+        return c.json({ message: 'Your account has been suspended by the administrator.' }, 403);
       }
       
-      const updatePayload = {
+      const updatePayload: any = {
         last_login_at: new Date(),
         is_verified: true
       };
@@ -294,7 +305,7 @@ router.post('/verify-otp', async (req, res) => {
       `
     }).catch(err => console.error('Error sending login email:', err));
 
-    return res.json({
+    return c.json({
       success: true,
       token,
       isNewUser,
@@ -308,30 +319,39 @@ router.post('/verify-otp', async (req, res) => {
     });
   } catch (err) {
     console.error('verify-otp error:', err);
-    return res.status(500).json({ message: 'Server error during verification' });
+    return c.json({ message: 'Server error during verification' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/user-auth/google
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/google', async (req, res) => {
+router.post('/google', async (c) => {
   try {
-    const { idToken } = req.body;
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const { idToken } = body;
     if (!idToken) {
-      return res.status(400).json({ message: 'Google ID token required' });
+      return c.json({ message: 'Google ID token required' }, 400);
     }
 
     // Verify with Google
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: Deno.env.get('GOOGLE_CLIENT_ID'),
     });
     const payload = ticket.getPayload();
+    if (!payload) {
+      return c.json({ message: 'Google authentication failed. Invalid ticket payload.' }, 401);
+    }
     const { sub: googleId, email, name, picture } = payload;
 
     if (!email) {
-      return res.status(400).json({ message: 'Google account must have an email' });
+      return c.json({ message: 'Google account must have an email' }, 400);
     }
 
     // Find by googleId or email where authMethod is google
@@ -366,10 +386,10 @@ router.post('/google', async (req, res) => {
       user = newUser;
     } else {
       if (!user.is_active) {
-        return res.status(403).json({ message: 'Your account has been suspended by the administrator.' });
+        return c.json({ message: 'Your account has been suspended by the administrator.' }, 403);
       }
 
-      const updatePayload = {
+      const updatePayload: any = {
         last_login_at: new Date(),
         is_verified: true
       };
@@ -423,7 +443,7 @@ router.post('/google', async (req, res) => {
       `
     }).catch(err => console.error('Error sending Google login email:', err));
 
-    return res.json({
+    return c.json({
       success: true,
       token,
       isNewUser,
@@ -435,24 +455,29 @@ router.post('/google', async (req, res) => {
         authMethod: user.auth_method,
       }
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('google-auth error:', err);
     try {
-      const fs = await import('fs');
-      fs.appendFileSync('/home/saqeb/Projects/ve-api/google-auth-error.log', `${new Date().toISOString()} - ERROR: ${err.message}\nStack: ${err.stack}\n\n`);
+      Deno.writeTextFileSync('/home/saqeb/Projects/ve-api/google-auth-error.log', `${new Date().toISOString()} - ERROR: ${err.message}\nStack: ${err.stack}\n\n`, { append: true });
     } catch (fsErr) {}
-    return res.status(401).json({ message: 'Google authentication failed. Please try again.' });
+    return c.json({ message: 'Google authentication failed. Please try again.' }, 401);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/user-auth/signup
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/signup', async (req, res) => {
+router.post('/signup', async (c) => {
   try {
-    const { name, email, password } = req.body;
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const { name, email, password } = body;
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
+      return c.json({ message: 'Email and password are required' }, 400);
     }
     const cleanEmail = email.toLowerCase().trim();
     
@@ -465,7 +490,7 @@ router.post('/signup', async (req, res) => {
 
     if (fetchErr) throw fetchErr;
     if (existingUser) {
-      return res.status(400).json({ message: 'User with this email already exists' });
+      return c.json({ message: 'User with this email already exists' }, 400);
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -519,7 +544,7 @@ router.post('/signup', async (req, res) => {
       `
     }).catch(err => console.error('Error sending signup email:', err));
 
-    return res.status(201).json({
+    return c.json({
       success: true,
       token,
       isNewUser: true,
@@ -530,21 +555,27 @@ router.post('/signup', async (req, res) => {
         avatar: user.avatar,
         authMethod: user.auth_method,
       }
-    });
+    }, 201);
   } catch (err) {
     console.error('signup error:', err);
-    return res.status(500).json({ message: 'Server error during signup' });
+    return c.json({ message: 'Server error during signup' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/user-auth/login
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/login', async (req, res) => {
+router.post('/login', async (c) => {
   try {
-    const { email, password } = req.body;
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const { email, password } = body;
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
+      return c.json({ message: 'Email and password are required' }, 400);
     }
     const cleanEmail = email.toLowerCase().trim();
 
@@ -557,19 +588,19 @@ router.post('/login', async (req, res) => {
 
     if (fetchErr) throw fetchErr;
     if (!user) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return c.json({ message: 'Invalid email or password' }, 401);
     }
     if (!user.is_active) {
-      return res.status(403).json({ message: 'Your account has been suspended by the administrator.' });
+      return c.json({ message: 'Your account has been suspended by the administrator.' }, 403);
     }
 
     if (!user.password) {
-      return res.status(401).json({ message: 'Please login with Google.' });
+      return c.json({ message: 'Please login with Google.' }, 401);
     }
 
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return c.json({ message: 'Invalid email or password' }, 401);
     }
 
     const { data: updatedUser, error: updateErr } = await supabase
@@ -617,7 +648,7 @@ router.post('/login', async (req, res) => {
       `
     }).catch(err => console.error('Error sending login email:', err));
 
-    return res.json({
+    return c.json({
       success: true,
       token,
       isNewUser: false,
@@ -631,80 +662,94 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error('login error:', err);
-    return res.status(500).json({ message: 'Server error during login' });
+    return c.json({ message: 'Server error during login' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/user-auth/me
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/me', userAuth, async (req, res) => {
+router.get('/me', userAuthMiddleware, async (c) => {
   try {
+    const userPayload = c.get('user');
     const { data: user, error } = await supabase
       .from('users')
       .select('*, addresses(*)')
-      .eq('id', toUUID(req.user.id))
+      .eq('id', toUUID(userPayload.id))
       .maybeSingle();
 
     if (error) throw error;
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return c.json({ message: 'User not found' }, 404);
     }
     if (!user.is_active) {
-      return res.status(403).json({ message: 'Your account has been suspended by the administrator.' });
+      return c.json({ message: 'Your account has been suspended by the administrator.' }, 403);
     }
     
     // Remove sensitive password hash and return formatted
     delete user.password;
     delete user.google_id;
 
-    return res.json(formatUserForFrontend(user));
+    return c.json(formatUserForFrontend(user));
   } catch (err) {
     console.error('me fetch error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return c.json({ message: 'Server error' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /api/user-auth/me
 // ─────────────────────────────────────────────────────────────────────────────
-router.put('/me', userAuth, async (req, res) => {
+router.put('/me', userAuthMiddleware, async (c) => {
   try {
-    const { name, phone } = req.body;
-    const updatePayload = {};
+    const userPayload = c.get('user');
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const { name, phone } = body;
+    const updatePayload: any = {};
     if (name !== undefined) updatePayload.name = name?.trim();
     if (phone !== undefined) updatePayload.phone = phone?.trim();
 
     const { data: user, error } = await supabase
       .from('users')
       .update(updatePayload)
-      .eq('id', toUUID(req.user.id))
+      .eq('id', toUUID(userPayload.id))
       .select('*, addresses(*)')
       .single();
 
     if (error) throw error;
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return c.json({ message: 'User not found' }, 404);
     if (!user.is_active) {
-      return res.status(403).json({ message: 'Your account has been suspended by the administrator.' });
+      return c.json({ message: 'Your account has been suspended by the administrator.' }, 403);
     }
     
     delete user.password;
     delete user.google_id;
 
-    return res.json(formatUserForFrontend(user));
+    return c.json(formatUserForFrontend(user));
   } catch (err) {
     console.error('me update error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return c.json({ message: 'Server error' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/user-auth/addresses
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/addresses', userAuth, async (req, res) => {
+router.post('/addresses', userAuthMiddleware, async (c) => {
   try {
-    const addressData = req.body;
-    const userId = toUUID(req.user.id);
+    const userPayload = c.get('user');
+    let addressData;
+    try {
+      addressData = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const userId = toUUID(userPayload.id);
 
     // Get existing addresses count
     const { data: existingAddresses, error: countErr } = await supabase
@@ -745,26 +790,32 @@ router.post('/addresses', userAuth, async (req, res) => {
     if (insertErr) throw insertErr;
 
     // Map and return
-    return res.status(201).json({
+    return c.json({
       ...newAddr,
       _id: newAddr.id,
       fullName: newAddr.full_name,
       isDefault: newAddr.is_default
-    });
+    }, 201);
   } catch (err) {
     console.error('add address error:', err);
-    return res.status(500).json({ message: 'Failed to add address' });
+    return c.json({ message: 'Failed to add address' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /api/user-auth/addresses/:id
 // ─────────────────────────────────────────────────────────────────────────────
-router.put('/addresses/:id', userAuth, async (req, res) => {
+router.put('/addresses/:id', userAuthMiddleware, async (c) => {
   try {
-    const userId = toUUID(req.user.id);
-    const addressId = toUUID(req.params.id);
-    const updatedData = req.body;
+    const userPayload = c.get('user');
+    const userId = toUUID(userPayload.id);
+    const addressId = toUUID(c.req.param('id'));
+    let updatedData;
+    try {
+      updatedData = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
 
     if (updatedData.isDefault) {
       // Mark all others as non-default
@@ -774,7 +825,7 @@ router.put('/addresses/:id', userAuth, async (req, res) => {
         .eq('user_id', userId);
     }
 
-    const updatePayload = {};
+    const updatePayload: any = {};
     if (updatedData.fullName !== undefined) updatePayload.full_name = updatedData.fullName;
     if (updatedData.email !== undefined) updatePayload.email = updatedData.email;
     if (updatedData.phone !== undefined) updatePayload.phone = updatedData.phone;
@@ -801,7 +852,7 @@ router.put('/addresses/:id', userAuth, async (req, res) => {
       .select('*')
       .eq('user_id', userId);
 
-    if (userAddresses && userAddresses.length > 0 && !userAddresses.some(a => a.is_default)) {
+    if (userAddresses && userAddresses.length > 0 && !userAddresses.some((a: any) => a.is_default)) {
       // Force default on first
       await supabase
         .from('addresses')
@@ -813,7 +864,7 @@ router.put('/addresses/:id', userAuth, async (req, res) => {
       }
     }
 
-    return res.json({
+    return c.json({
       ...updatedAddr,
       _id: updatedAddr.id,
       fullName: updatedAddr.full_name,
@@ -821,17 +872,18 @@ router.put('/addresses/:id', userAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('update address error:', err);
-    return res.status(500).json({ message: 'Failed to update address' });
+    return c.json({ message: 'Failed to update address' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DELETE /api/user-auth/addresses/:id
 // ─────────────────────────────────────────────────────────────────────────────
-router.delete('/addresses/:id', userAuth, async (req, res) => {
+router.delete('/addresses/:id', userAuthMiddleware, async (c) => {
   try {
-    const userId = toUUID(req.user.id);
-    const addressId = toUUID(req.params.id);
+    const userPayload = c.get('user');
+    const userId = toUUID(userPayload.id);
+    const addressId = toUUID(c.req.param('id'));
 
     const { error: deleteErr } = await supabase
       .from('addresses')
@@ -850,7 +902,7 @@ router.delete('/addresses/:id', userAuth, async (req, res) => {
     if (fetchErr) throw fetchErr;
 
     // Ensure at least one remaining address is default
-    if (remaining && remaining.length > 0 && !remaining.some(a => a.is_default)) {
+    if (remaining && remaining.length > 0 && !remaining.some((a: any) => a.is_default)) {
       await supabase
         .from('addresses')
         .update({ is_default: true })
@@ -858,7 +910,7 @@ router.delete('/addresses/:id', userAuth, async (req, res) => {
       remaining[0].is_default = true;
     }
 
-    const mappedRemaining = (remaining || []).map(addr => ({
+    const mappedRemaining = (remaining || []).map((addr: any) => ({
       _id: addr.id,
       id: addr.id,
       fullName: addr.full_name,
@@ -872,17 +924,17 @@ router.delete('/addresses/:id', userAuth, async (req, res) => {
       isDefault: addr.is_default
     }));
 
-    return res.json({ success: true, addresses: mappedRemaining });
+    return c.json({ success: true, addresses: mappedRemaining });
   } catch (err) {
     console.error('delete address error:', err);
-    return res.status(500).json({ message: 'Failed to delete address' });
+    return c.json({ message: 'Failed to delete address' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/user-auth/admin/users
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/admin/users', adminAuth, async (req, res) => {
+router.get('/admin/users', authMiddleware, async (c) => {
   try {
     const { data: users, error: fetchErr } = await supabase
       .from('users')
@@ -892,7 +944,7 @@ router.get('/admin/users', adminAuth, async (req, res) => {
     if (fetchErr) throw fetchErr;
     
     // Enrich users with order metrics
-    const enrichedUsers = await Promise.all((users || []).map(async (user) => {
+    const enrichedUsers = await Promise.all((users || []).map(async (user: any) => {
       const { data: userOrders, error: orderErr } = await supabase
         .from('orders')
         .select('total')
@@ -918,30 +970,36 @@ router.get('/admin/users', adminAuth, async (req, res) => {
       };
     }));
 
-    return res.json(enrichedUsers);
+    return c.json(enrichedUsers);
   } catch (err) {
     console.error('admin users error:', err);
-    return res.status(500).json({ message: 'Server error fetching users' });
+    return c.json({ message: 'Server error fetching users' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /api/user-auth/admin/users/:id/status
 // ─────────────────────────────────────────────────────────────────────────────
-router.put('/admin/users/:id/status', adminAuth, async (req, res) => {
+router.put('/admin/users/:id/status', authMiddleware, async (c) => {
   try {
-    const { isActive } = req.body;
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const { isActive } = body;
     const { data: user, error } = await supabase
       .from('users')
       .update({ is_active: isActive })
-      .eq('id', toUUID(req.params.id))
+      .eq('id', toUUID(c.req.param('id')))
       .select()
       .single();
 
     if (error) throw error;
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return c.json({ message: 'User not found' }, 404);
     
-    return res.json({
+    return c.json({
       ...user,
       _id: user.id,
       isActive: user.is_active,
@@ -949,16 +1007,16 @@ router.put('/admin/users/:id/status', adminAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('admin user status update error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return c.json({ message: 'Server error' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DELETE /api/user-auth/admin/users/:id
 // ─────────────────────────────────────────────────────────────────────────────
-router.delete('/admin/users/:id', adminAuth, async (req, res) => {
+router.delete('/admin/users/:id', authMiddleware, async (c) => {
   try {
-    const userId = toUUID(req.params.id);
+    const userId = toUUID(c.req.param('id'));
     const { data: user, error: userErr } = await supabase
       .from('users')
       .delete()
@@ -967,7 +1025,7 @@ router.delete('/admin/users/:id', adminAuth, async (req, res) => {
       .single();
 
     if (userErr) throw userErr;
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return c.json({ message: 'User not found' }, 404);
     
     // Convert active orders to guest checkouts to prevent data loss
     await supabase
@@ -975,21 +1033,27 @@ router.delete('/admin/users/:id', adminAuth, async (req, res) => {
       .update({ user_id: null, guest_info: { email: user.email, name: user.name, phone: user.phone || '' } })
       .eq('user_id', userId);
     
-    return res.json({ success: true, message: 'User access removed successfully' });
+    return c.json({ success: true, message: 'User access removed successfully' });
   } catch (err) {
     console.error('admin user delete error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return c.json({ message: 'Server error' }, 500);
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/user-auth/admin/send-custom-email
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/admin/send-custom-email', adminAuth, async (req, res) => {
+router.post('/admin/send-custom-email', authMiddleware, async (c) => {
   try {
-    const { to, subject, body } = req.body;
-    if (!to || !subject || !body) {
-      return res.status(400).json({ message: 'Recipient (to), subject, and body are required' });
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ message: 'Invalid JSON body' }, 400);
+    }
+    const { to, subject, body: emailBody } = body;
+    if (!to || !subject || !emailBody) {
+      return c.json({ message: 'Recipient (to), subject, and body are required' }, 400);
     }
 
     const htmlBody = `
@@ -997,7 +1061,7 @@ router.post('/admin/send-custom-email', adminAuth, async (req, res) => {
         <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
           <h2 style="color: #8A4F5A; margin-top: 0; text-align: center;">Van Elvina</h2>
           <div style="border-top: 1px solid #E8C5CA; margin: 15px 0;"></div>
-          <p style="white-space: pre-line; font-size: 14px; color: #555;">${body}</p>
+          <p style="white-space: pre-line; font-size: 14px; color: #555;">${emailBody}</p>
           <div style="border-top: 1px solid #E8C5CA; margin: 20px 0 10px;"></div>
           <p style="font-size: 11px; color: #999; text-align: center; margin: 0;">This is an administrative message sent by Van Elvina support.</p>
         </div>
@@ -1005,10 +1069,10 @@ router.post('/admin/send-custom-email', adminAuth, async (req, res) => {
     `;
 
     await sendEmail({ to, subject, html: htmlBody });
-    return res.json({ success: true, message: 'Email sent successfully' });
-  } catch (err) {
+    return c.json({ success: true, message: 'Email sent successfully' });
+  } catch (err: any) {
     console.error('Send custom email error:', err);
-    return res.status(500).json({ message: err.message || 'Failed to send custom email' });
+    return c.json({ message: err.message || 'Failed to send custom email' }, 500);
   }
 });
 

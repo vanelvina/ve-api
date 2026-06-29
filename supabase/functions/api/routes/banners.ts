@@ -1,12 +1,12 @@
-import express from 'express';
-import { supabase } from '../utils/supabase.js';
-import { toUUID } from '../utils/uuid.js';
-import authMiddleware from '../middleware/auth.js';
+import { Hono } from 'https://deno.land/x/hono@v3.11.7/mod.ts';
+import { supabase } from '../utils/supabase.ts';
+import { toUUID } from '../utils/uuid.ts';
+import { authMiddleware } from '../middleware/auth.ts';
 
-const router = express.Router();
+const router = new Hono();
 
 // Helper to map Supabase Banner row to Frontend expected format
-const mapBannerFromSupabase = (row) => {
+const mapBannerFromSupabase = (row: any) => {
   if (!row) return null;
   return {
     _id: row.id,
@@ -28,8 +28,8 @@ const mapBannerFromSupabase = (row) => {
 };
 
 // Helper to map Frontend Banner payload to Supabase schema
-const mapBannerToSupabase = (body) => {
-  const payload = {};
+const mapBannerToSupabase = (body: any) => {
+  const payload: any = {};
   if (body.title !== undefined) payload.title = body.title;
   if (body.image !== undefined) payload.image = body.image;
   if (body.imageMobile !== undefined) payload.image_mobile = body.imageMobile;
@@ -42,7 +42,7 @@ const mapBannerToSupabase = (body) => {
 };
 
 // GET all banners
-router.get('/', async (req, res) => {
+router.get('/', async (c) => {
   try {
     const { data, error } = await supabase
       .from('banners')
@@ -50,16 +50,17 @@ router.get('/', async (req, res) => {
       .order('position', { ascending: true });
 
     if (error) throw error;
-    res.json(data.map(mapBannerFromSupabase));
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    return c.json(data.map(mapBannerFromSupabase));
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
   }
 });
 
 // POST add new banner
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, async (c) => {
   try {
-    const payload = mapBannerToSupabase(req.body);
+    const body = await c.req.json().catch(() => ({}));
+    const payload = mapBannerToSupabase(body);
     const { data, error } = await supabase
       .from('banners')
       .insert(payload)
@@ -67,17 +68,19 @@ router.post('/', authMiddleware, async (req, res) => {
       .single();
 
     if (error) throw error;
-    res.status(201).json(mapBannerFromSupabase(data));
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+    return c.json(mapBannerFromSupabase(data), 201);
+  } catch (error: any) {
+    return c.json({ message: error.message }, 400);
   }
 });
 
 // PUT update banner
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, async (c) => {
   try {
-    const uuid = toUUID(req.params.id);
-    const payload = mapBannerToSupabase(req.body);
+    const id = c.req.param('id');
+    const uuid = toUUID(id);
+    const body = await c.req.json().catch(() => ({}));
+    const payload = mapBannerToSupabase(body);
     const { data, error } = await supabase
       .from('banners')
       .update(payload)
@@ -86,17 +89,18 @@ router.put('/:id', authMiddleware, async (req, res) => {
       .single();
 
     if (error) throw error;
-    if (!data) return res.status(404).json({ message: 'Banner not found' });
-    res.json(mapBannerFromSupabase(data));
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+    if (!data) return c.json({ message: 'Banner not found' }, 404);
+    return c.json(mapBannerFromSupabase(data));
+  } catch (error: any) {
+    return c.json({ message: error.message }, 400);
   }
 });
 
 // DELETE banner
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, async (c) => {
   try {
-    const uuid = toUUID(req.params.id);
+    const id = c.req.param('id');
+    const uuid = toUUID(id);
     const { data, error } = await supabase
       .from('banners')
       .delete()
@@ -105,9 +109,9 @@ router.delete('/:id', authMiddleware, async (req, res) => {
       .maybeSingle();
 
     if (error) throw error;
-    res.json({ message: 'Banner deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    return c.json({ message: 'Banner deleted successfully' });
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
   }
 });
 

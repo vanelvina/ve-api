@@ -1,11 +1,11 @@
-import express from 'express';
-import { supabase } from '../utils/supabase.js';
-import authMiddleware from '../middleware/auth.js';
+import { Hono } from 'https://deno.land/x/hono@v3.11.7/mod.ts';
+import { supabase } from '../utils/supabase.ts';
+import { authMiddleware } from '../middleware/auth.ts';
 
-const router = express.Router();
+const router = new Hono();
 
 // Helper to map Supabase about_us row to Frontend expected format
-const mapAboutToFrontend = (row) => {
+const mapAboutToFrontend = (row: any) => {
   if (!row) return null;
   return {
     _id: row.id,
@@ -27,7 +27,7 @@ const mapAboutToFrontend = (row) => {
 };
 
 // GET /api/about — Retrieve the About Us page content. Auto-initializes defaults if empty.
-router.get('/', async (req, res) => {
+router.get('/', async (c) => {
   try {
     let { data: about, error } = await supabase
       .from('about_us')
@@ -74,16 +74,17 @@ router.get('/', async (req, res) => {
       if (insertErr) throw insertErr;
       about = inserted;
     }
-    return res.json(mapAboutToFrontend(about));
-  } catch (error) {
+    return c.json(mapAboutToFrontend(about));
+  } catch (error: any) {
     console.error('Fetch About Us content error:', error);
-    return res.status(500).json({ message: 'Server error fetching page content' });
+    return c.json({ message: 'Server error fetching page content' }, 500);
   }
 });
 
 // PUT /api/about — Update the About Us page content (Admin only)
-router.put('/', authMiddleware, async (req, res) => {
+router.put('/', authMiddleware, async (c) => {
   try {
+    const body = await c.req.json().catch(() => ({}));
     let { data: about, error } = await supabase
       .from('about_us')
       .select('*')
@@ -121,17 +122,17 @@ router.put('/', authMiddleware, async (req, res) => {
 
     if (!about) {
       const insertPayload = {
-        story_title: req.body.storyTitle ?? defaultAbout.story_title,
-        story_subtitle: req.body.storySubtitle ?? defaultAbout.story_subtitle,
-        story_content: req.body.storyContent ?? defaultAbout.story_content,
-        story_image: req.body.storyImage ?? defaultAbout.story_image,
-        vision_title: req.body.visionTitle ?? defaultAbout.vision_title,
-        vision_subtitle: req.body.visionSubtitle ?? defaultAbout.vision_subtitle,
-        vision_content: req.body.visionContent ?? defaultAbout.vision_content,
-        philosophy_title: req.body.philosophyTitle ?? defaultAbout.philosophy_title,
-        philosophy_content: req.body.philosophyContent ?? defaultAbout.philosophy_content,
-        philosophy_image: req.body.philosophyImage ?? defaultAbout.philosophy_image,
-        promises: req.body.promises ?? defaultAbout.promises,
+        story_title: body.storyTitle ?? defaultAbout.story_title,
+        story_subtitle: body.storySubtitle ?? defaultAbout.story_subtitle,
+        story_content: body.storyContent ?? defaultAbout.story_content,
+        story_image: body.storyImage ?? defaultAbout.story_image,
+        vision_title: body.visionTitle ?? defaultAbout.vision_title,
+        vision_subtitle: body.visionSubtitle ?? defaultAbout.vision_subtitle,
+        vision_content: body.visionContent ?? defaultAbout.vision_content,
+        philosophy_title: body.philosophyTitle ?? defaultAbout.philosophy_title,
+        philosophy_content: body.philosophyContent ?? defaultAbout.philosophy_content,
+        philosophy_image: body.philosophyImage ?? defaultAbout.philosophy_image,
+        promises: body.promises ?? defaultAbout.promises,
       };
 
       const { data: inserted, error: insertErr } = await supabase
@@ -141,21 +142,21 @@ router.put('/', authMiddleware, async (req, res) => {
         .single();
 
       if (insertErr) throw insertErr;
-      return res.json(mapAboutToFrontend(inserted));
+      return c.json(mapAboutToFrontend(inserted));
     } else {
       const updatePayload = {
-        story_title: req.body.storyTitle ?? about.story_title,
-        story_subtitle: req.body.storySubtitle ?? about.story_subtitle,
-        story_content: req.body.storyContent ?? about.story_content,
-        story_image: req.body.storyImage ?? about.story_image,
-        vision_title: req.body.visionTitle ?? about.vision_title,
-        vision_subtitle: req.body.visionSubtitle ?? about.vision_subtitle,
-        vision_content: req.body.visionContent ?? about.vision_content,
-        philosophy_title: req.body.philosophyTitle ?? about.philosophy_title,
-        philosophy_content: req.body.philosophyContent ?? about.philosophy_content,
-        philosophy_image: req.body.philosophyImage ?? about.philosophy_image,
-        promises: req.body.promises ?? about.promises,
-        updated_at: new Date()
+        story_title: body.storyTitle ?? about.story_title,
+        story_subtitle: body.storySubtitle ?? about.story_subtitle,
+        story_content: body.storyContent ?? about.story_content,
+        story_image: body.storyImage ?? about.story_image,
+        vision_title: body.visionTitle ?? about.vision_title,
+        vision_subtitle: body.visionSubtitle ?? about.vision_subtitle,
+        vision_content: body.visionContent ?? about.vision_content,
+        philosophy_title: body.philosophyTitle ?? about.philosophy_title,
+        philosophy_content: body.philosophyContent ?? about.philosophy_content,
+        philosophy_image: body.philosophyImage ?? about.philosophy_image,
+        promises: body.promises ?? about.promises,
+        updated_at: new Date().toISOString()
       };
 
       const { data: updated, error: updateErr } = await supabase
@@ -166,11 +167,11 @@ router.put('/', authMiddleware, async (req, res) => {
         .single();
 
       if (updateErr) throw updateErr;
-      return res.json(mapAboutToFrontend(updated));
+      return c.json(mapAboutToFrontend(updated));
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Update About Us content error:', error);
-    return res.status(500).json({ message: 'Server error updating page content' });
+    return c.json({ message: 'Server error updating page content' }, 500);
   }
 });
 
