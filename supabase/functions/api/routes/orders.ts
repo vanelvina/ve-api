@@ -71,6 +71,17 @@ const getOrderCustomerInfo = async (order: any) => {
   return { email: email?.toLowerCase().trim(), name };
 };
 
+const triggerOrderPushNotification = async (order: any, title: string, body: string, url: string = '/') => {
+  try {
+    const customer = await getOrderCustomerInfo(order);
+    if (customer.email) {
+      await sendPushNotification(customer.email, title, body, url);
+    }
+  } catch (err) {
+    console.error('Error triggering order push notification:', err);
+  }
+};
+
 const triggerOrderEmail = async (order: any, type: string, note = '') => {
   try {
     const customer = await getOrderCustomerInfo(order);
@@ -589,7 +600,7 @@ router.post('/', optionalAuth, async (c) => {
 
     // Trigger order confirmation email notification
     triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering COD order email:', err));
-    sendPushNotification(order.email, 'Order Placed! 🎉', `Thank you! Your Order #${order.order_id} for ₹${order.total} has been received.`, `/account/orders/${order.id}`).catch(() => {});
+    triggerOrderPushNotification(order, 'Order Placed! 🎉', `Thank you! Your Order #${order.order_id} for ₹${order.total} has been received.`, `/account/orders/${order.id}`).catch(() => {});
 
     return c.json({
       success: true,
@@ -707,7 +718,7 @@ router.post('/verify-payment', optionalAuth, async (c) => {
 
       // Trigger order confirmation email notification
       triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering payment-confirmed order email:', err));
-      sendPushNotification(order.email, 'Payment Confirmed! 💳', `Thank you! Your Order #${order.order_id} for ₹${order.total} payment is confirmed.`, `/account/orders/${order.id}`).catch(() => {});
+      triggerOrderPushNotification(order, 'Payment Confirmed! 💳', `Thank you! Your Order #${order.order_id} for ₹${order.total} payment is confirmed.`, `/account/orders/${order.id}`).catch(() => {});
 
       return c.json({
         success: true,
@@ -863,6 +874,9 @@ router.put('/:id/status', authMiddleware, async (c) => {
       updatePayload.payment_status = paymentStatus;
     }
 
+    // Explicitly update updated_at timestamp
+    updatePayload.updated_at = new Date().toISOString();
+
     const { data: updatedOrder, error: updateErr } = await supabase
       .from('orders')
       .update(updatePayload)
@@ -874,9 +888,20 @@ router.put('/:id/status', authMiddleware, async (c) => {
 
     if (statusChanged) {
       triggerOrderEmail(updatedOrder, 'status_updated', note).catch(err => console.error('Error triggering status update email:', err));
-      const statusTitle = 'Order Update 📦';
-      const statusBody = `Your Order #${updatedOrder.order_id} status has been updated to: ${updatedOrder.order_status.replace(/_/g, ' ').toUpperCase()}`;
-      sendPushNotification(updatedOrder.email, statusTitle, statusBody, `/account/orders/${updatedOrder.id}`).catch(() => {});
+      
+      const isCancelled = updatedOrder.order_status === 'cancelled';
+      const statusTitle = isCancelled ? 'Order Cancelled ❌' : 'Order Update 📦';
+      const statusBody = isCancelled 
+        ? `Your Order #${updatedOrder.order_id} has been cancelled.` 
+        : `Your Order #${updatedOrder.order_id} status has been updated to: ${updatedOrder.order_status.replace(/_/g, ' ').toUpperCase()}`;
+      
+      // Notify customer
+      triggerOrderPushNotification(updatedOrder, statusTitle, statusBody, `/account/orders/${updatedOrder.id}`).catch(() => {});
+      
+      // If order is cancelled, also notify admin
+      if (isCancelled) {
+        sendPushNotification('admin', '❌ Order Cancelled', `Order #${updatedOrder.order_id} has been cancelled.`).catch(() => {});
+      }
     }
 
     return c.json(formatOrderForFrontend(updatedOrder));
@@ -934,7 +959,8 @@ router.post('/:id/return', userAuthMiddleware, async (c) => {
       .from('orders')
       .update({
         order_status: 'return_requested',
-        status_history: newHistory
+        status_history: newHistory,
+        updated_at: new Date().toISOString()
       })
       .eq('id', orderId)
       .select()
@@ -943,7 +969,8 @@ router.post('/:id/return', userAuthMiddleware, async (c) => {
     if (updateErr) throw updateErr;
 
     triggerOrderEmail(updatedOrder, 'return_requested', reason).catch(err => console.error('Error triggering return requested email:', err));
-    sendPushNotification(updatedOrder.email, 'Return Requested ↩️', `Your return request for Order #${updatedOrder.order_id} has been submitted.`, `/account/orders/${updatedOrder.id}`).catch(() => {});
+    triggerOrderPushNotification(updatedOrder, 'Return Requested ↩️', `Your return request for Order #${updatedOrder.order_id} has been submitted.`, `/account/orders/${updatedOrder.id}`).catch(() => {});
+    sendPushNotification('admin', '↩️ Return Requested', `Order #${updatedOrder.order_id} return requested by customer.`).catch(() => {});
 
     return c.json(formatOrderForFrontend(updatedOrder));
   } catch (err) {
@@ -1000,7 +1027,8 @@ router.post('/:id/exchange', userAuthMiddleware, async (c) => {
       .from('orders')
       .update({
         order_status: 'exchange_requested',
-        status_history: newHistory
+        status_history: newHistory,
+        updated_at: new Date().toISOString()
       })
       .eq('id', orderId)
       .select()
@@ -1009,7 +1037,8 @@ router.post('/:id/exchange', userAuthMiddleware, async (c) => {
     if (updateErr) throw updateErr;
 
     triggerOrderEmail(updatedOrder, 'exchange_requested', reason).catch(err => console.error('Error triggering exchange requested email:', err));
-    sendPushNotification(updatedOrder.email, 'Exchange Requested 🔄', `Your exchange request for Order #${updatedOrder.order_id} has been submitted.`, `/account/orders/${updatedOrder.id}`).catch(() => {});
+    triggerOrderPushNotification(updatedOrder, 'Exchange Requested 🔄', `Your exchange request for Order #${updatedOrder.order_id} has been submitted.`, `/account/orders/${updatedOrder.id}`).catch(() => {});
+    sendPushNotification('admin', '🔄 Exchange Requested', `Order #${updatedOrder.order_id} exchange requested by customer.`).catch(() => {});
 
     return c.json(formatOrderForFrontend(updatedOrder));
   } catch (err) {

@@ -7,6 +7,7 @@ import { supabase } from '../utils/supabase.ts';
 import { toUUID } from '../utils/uuid.ts';
 import { userAuthMiddleware, authMiddleware } from '../middleware/auth.ts';
 import { sendEmail } from '../utils/email.ts';
+import { sendPushNotification } from './inquiries.ts';
 
 const router = new Hono();
 const resend = new Resend(Deno.env.get('RESEND_API_KEY') || 're_dummy_key_for_dev_bypass');
@@ -513,6 +514,9 @@ router.post('/signup', async (c) => {
     if (createErr) throw createErr;
 
     const token = signUserToken(user);
+
+    // Trigger admin push notification
+    sendPushNotification('admin', '🆕 New Customer Registered', `${user.name || 'User'} (${user.email}) just signed up!`).catch(() => {});
 
     // Trigger welcome / signup confirmation email notification
     sendEmail({
