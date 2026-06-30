@@ -4,19 +4,28 @@ import { toUUID } from '../utils/uuid.ts';
 import { authMiddleware } from '../middleware/auth.ts';
 import webpush from 'npm:web-push';
 
-webpush.setVapidDetails(
-  'mailto:support@vanelvina.com',
-  'BF2ljIBKIQS12D8ynJn2rLVbA8LFcsEsOm4Pjik6HAMWto3LaGWwh29Sud_KGZzfODX5zPTE-ZugvVveDWCGwzY',
-  'f-idj4KvkQsoR8G4m2y_AEMcMLVo78SGbRzPMFE6gko'
-);
+const vapidSubject = Deno.env.get('VAPID_SUBJECT') || 'mailto:support@vanelvina.com';
+const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY') || 'BF2ljIBKIQS12D8ynJn2rLVbA8LFcsEsOm4Pjik6HAMWto3LaGWwh29Sud_KGZzfODX5zPTE-ZugvVveDWCGwzY';
+const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY') || 'f-idj4KvkQsoR8G4m2y_AEMcMLVo78SGbRzPMFE6gko';
+
+webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
 export async function sendPushNotification(targetEmail: string, title: string, body: string, url: string = '/') {
   try {
-    const { data: subs, error } = await supabase
+    let subsQuery = supabase
       .from('inquiries')
       .select('*')
-      .eq('status', 'push_subscription')
-      .eq('email', targetEmail);
+      .eq('status', 'push_subscription');
+
+    if (targetEmail === 'admin') {
+      subsQuery = subsQuery.or(
+        'email.eq.admin,email.eq.support@vanelvina.com,email.like.%@vanelvina.com%,name.ilike.%admin%,name.ilike.%support%'
+      );
+    } else {
+      subsQuery = subsQuery.eq('email', targetEmail);
+    }
+
+    const { data: subs, error } = await subsQuery;
 
     if (error || !subs || subs.length === 0) return;
 
@@ -452,7 +461,7 @@ router.get('/analytics/summary', authMiddleware, async (c) => {
       { stage: 'Product Clicks', count: productClicks },
       { stage: 'Add to Cart', count: addToCarts },
       { stage: 'Checkout Started', count: checkoutsStarted },
-      { stage: 'Orders Completed', count: checkoutsCompleted || totalOrders },
+      { stage: 'Orders Completed', count: checkoutsCompleted },
     ];
 
     return c.json({
@@ -465,14 +474,14 @@ router.get('/analytics/summary', authMiddleware, async (c) => {
         productClicks,
         addToCarts,
         checkoutsStarted,
-        checkoutsCompleted: checkoutsCompleted || totalOrders,
+        checkoutsCompleted,
         checkoutsAbandoned,
         logins,
         orders: totalOrders,
         returns: totalReturns,
         exchanges: totalExchanges,
         revenue: Math.round(totalRevenue),
-        conversionRate: visits > 0 ? ((checkoutsCompleted || totalOrders) / visits * 100).toFixed(1) : '0.0',
+        conversionRate: visits > 0 ? ((checkoutsCompleted) / visits * 100).toFixed(1) : '0.0',
         abandonRate: checkoutsStarted > 0 ? (checkoutsAbandoned / checkoutsStarted * 100).toFixed(1) : '0.0',
         cartToCheckout: addToCarts > 0 ? (checkoutsStarted / addToCarts * 100).toFixed(1) : '0.0',
       },
