@@ -579,7 +579,6 @@ router.post('/', optionalAuth, async (c) => {
       items: mappedItems,
       shipping_address: shippingAddress,
       payment_method: paymentMethod || 'cod',
-      shipping_method: shippingMethod || 'standard',
       subtotal: subtotal || 0,
       shipping_fee: shippingFee || 0,
       discount: discount || 0,
@@ -590,13 +589,28 @@ router.post('/', optionalAuth, async (c) => {
       order_status: 'placed'
     };
 
-    const { data: order, error } = await supabase
-      .from('orders')
-      .insert(orderPayload)
-      .select()
-      .single();
+    
+      let { data: order, error } = await supabase
+        .from('orders')
+        .insert(orderPayload)
+        .select()
+        .single();
 
-    if (error) throw error;
+      // Handle stale JWT foreign key violation on user_id
+      if (error && error.code === '23503' && error.message.includes('orders_user_id_fkey')) {
+        console.warn('Stale JWT token detected (user_id not in DB). Retrying as guest...');
+        orderPayload.user_id = null;
+        const retry = await supabase
+          .from('orders')
+          .insert(orderPayload)
+          .select()
+          .single();
+        order = retry.data;
+        error = retry.error;
+      }
+
+      if (error) throw error;
+
 
     // Trigger order confirmation email notification
     triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering COD order email:', err));
@@ -694,7 +708,6 @@ router.post('/verify-payment', optionalAuth, async (c) => {
         items: mappedItems,
         shipping_address: shippingAddress,
         payment_method: paymentMethod || 'razorpay',
-        shipping_method: shippingMethod || 'standard',
         subtotal: subtotal || 0,
         shipping_fee: shippingFee || 0,
         discount: discount || 0,
@@ -708,13 +721,28 @@ router.post('/verify-payment', optionalAuth, async (c) => {
         order_status: 'placed'
       };
 
-      const { data: order, error } = await supabase
+      
+      let { data: order, error } = await supabase
         .from('orders')
         .insert(orderPayload)
         .select()
         .single();
 
+      // Handle stale JWT foreign key violation on user_id
+      if (error && error.code === '23503' && error.message.includes('orders_user_id_fkey')) {
+        console.warn('Stale JWT token detected (user_id not in DB). Retrying as guest...');
+        orderPayload.user_id = null;
+        const retry = await supabase
+          .from('orders')
+          .insert(orderPayload)
+          .select()
+          .single();
+        order = retry.data;
+        error = retry.error;
+      }
+
       if (error) throw error;
+
 
       // Trigger order confirmation email notification
       triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering payment-confirmed order email:', err));
@@ -731,7 +759,7 @@ router.post('/verify-payment', optionalAuth, async (c) => {
     }
   } catch (error: any) {
     console.error('Razorpay verify payment error:', error);
-    return c.json({ message: error.message || "Internal Server Error!" }, 500);
+    return c.json({ message: error.message || (typeof error === "string" ? error : "Internal Server Error!"), details: error.stack || error }, 500);
   }
 });
 
