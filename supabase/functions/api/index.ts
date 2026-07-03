@@ -28,6 +28,14 @@ app.use('*', cors({
   maxAge: 600,
 }));
 
+// Set global Cache-Control headers to completely disable backend response caching
+app.use('*', async (c, next) => {
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  c.header('Pragma', 'no-cache');
+  c.header('Expires', '0');
+  await next();
+});
+
 // Health check endpoint
 app.get('/health', (c) => {
   return c.json({

@@ -139,25 +139,38 @@ router.post('/event', async (c) => {
     if (error) throw error;
 
     // Send push notification to admins / users in the background
-    if (eventType === 'analytics_visit') {
-      sendPushNotification('admin', '👤 New Visitor Counted', `${userName || 'Guest'} viewed the site`).catch(() => {});
+    // Only notify for high-value pages to avoid notification fatigue
+    const HIGH_VALUE_PATHS = ['/', '/products', '/checkout', '/bag']
+    const isHighValuePath = eventData?.path && HIGH_VALUE_PATHS.some((p: string) => eventData.path === p || eventData.path.startsWith(p + '?'))
+
+    if (eventType === 'analytics_visit' && isHighValuePath) {
+      // Only push on high-value page visits, not every SPA navigation
+      sendPushNotification('admin', '👤 Visitor on ' + (eventData?.path || 'site'), `${userName || 'Guest'} is browsing`).catch(() => {})
     } else if (eventType === 'analytics_add_to_cart') {
-      sendPushNotification('admin', '🛒 Product Added to Cart', `${userName || 'Guest'} added ${eventData?.productName || 'a product'} to cart`).catch(() => {});
+      sendPushNotification('admin', '🛒 Product Added to Cart', `${userName || 'Guest'} added ${eventData?.productName || 'a product'} to cart`).catch(() => {})
     } else if (eventType === 'analytics_login') {
-      sendPushNotification('admin', '🔑 Customer Login', `${userName || 'User'} logged in`).catch(() => {});
+      sendPushNotification('admin', '🔑 Customer Login', `${userName || 'User'} logged in`).catch(() => {})
       if (userEmail && userEmail !== 'anonymous@vanelvina.com' && userEmail !== 'anonymous') {
-        sendPushNotification(userEmail, 'Welcome back! ✨', `Hello ${userName || 'Delicate'}, you have logged in successfully.`, '/').catch(() => {});
+        sendPushNotification(userEmail, 'Welcome back! ✨', `Hello ${userName || 'Delicate'}, you have logged in successfully.`, '/').catch(() => {})
       }
     } else if (eventType === 'analytics_checkout') {
-      sendPushNotification('admin', '🛍️ New Order Received!', `Order #${eventData?.orderId || '—'} placed by ${userName || 'Guest'} for ₹${(eventData?.total || 0).toLocaleString('en-IN')}`).catch(() => {});
+      sendPushNotification('admin', '🛍️ New Order Received!', `Order #${eventData?.orderId || '—'} placed by ${userName || 'Guest'} for ₹${(eventData?.total || 0).toLocaleString('en-IN')}`).catch(() => {})
     } else if (eventType === 'analytics_product_view') {
-      sendPushNotification('admin', '👀 Product Viewed', `${userName || 'Guest'} viewed ${eventData?.productName || 'a product'}`).catch(() => {});
+      // Skip product view push — too noisy. Only log to DB.
     } else if (eventType === 'analytics_click') {
-      sendPushNotification('admin', '🖱️ Product Clicked', `${userName || 'Guest'} clicked ${eventData?.productName || 'a product'}`).catch(() => {});
+      // Skip click push — too noisy. Only log to DB.
     } else if (eventType === 'analytics_checkout_started') {
-      sendPushNotification('admin', '🛒 Checkout Started', `${userName || 'Guest'} opened checkout with ${eventData?.itemsCount || 0} items (Total: ₹${(eventData?.total || 0).toLocaleString('en-IN')})`).catch(() => {});
+      // Include customer context in checkout started notification so admins know who is checking out
+      const customerInfo = userEmail && userEmail !== 'anonymous@vanelvina.com'
+        ? `${userName || userEmail} (${userEmail})`
+        : `Guest${eventData?.phone ? ` · ${eventData.phone}` : ''}`
+      sendPushNotification(
+        'admin',
+        '🛒 Checkout Started',
+        `${customerInfo} opened checkout · ${eventData?.itemsCount || 0} items · ₹${(eventData?.total || 0).toLocaleString('en-IN')}`
+      ).catch(() => {})
     } else if (eventType === 'analytics_checkout_abandoned') {
-      sendPushNotification('admin', '🥀 Checkout Abandoned', `${userName || 'Guest'} abandoned checkout at step: ${eventData?.lastStep || 'Unknown'}`).catch(() => {});
+      sendPushNotification('admin', '🥀 Checkout Abandoned', `${userName || 'Guest'} abandoned checkout at step: ${eventData?.lastStep || 'Unknown'}`).catch(() => {})
     }
 
     return c.json({ success: true, id: data.id }, 201);
