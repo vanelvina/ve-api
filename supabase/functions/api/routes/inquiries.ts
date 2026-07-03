@@ -5,8 +5,8 @@ import { authMiddleware } from '../middleware/auth.ts';
 import webpush from 'npm:web-push';
 
 const vapidSubject = Deno.env.get('VAPID_SUBJECT') || 'mailto:support@vanelvina.com';
-const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY') || 'BF2ljIBKIQS12D8ynJn2rLVbA8LFcsEsOm4Pjik6HAMWto3LaGWwh29Sud_KGZzfODX5zPTE-ZugvVveDWCGwzY';
-const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY') || 'f-idj4KvkQsoR8G4m2y_AEMcMLVo78SGbRzPMFE6gko';
+const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY') || 'BGMpRAqfexagv3dgwiH7WidSTEzAfj0lMJak_4ZskcYD7N6ZFtZLlTrObVtNLXJOXzAMu6onqA0R0dFP9e-IRuA';
+const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY') || 'UXtE5KVz8rjEkABmlMY9e1qwsKUg0wH_f9xPJrehGzc';
 
 webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 

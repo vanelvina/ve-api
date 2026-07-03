@@ -272,6 +272,10 @@ router.post('/verify-otp', async (c) => {
 
     const token = signUserToken(user);
     
+    // Trigger successful login push notifications
+    sendPushNotification(user.email, 'Welcome back! ✨', 'You have logged in successfully to your Van Elvina account.', '/').catch(() => {});
+    sendPushNotification('admin', '🔑 Customer Login', `${user.name || 'User'} (${user.email}) logged in via OTP`, '/admin/dashboard').catch(() => {});
+
     // Trigger successful login email notification
     sendEmail({
       to: user.email,
@@ -410,6 +414,10 @@ router.post('/google', async (c) => {
 
     const token = signUserToken(user);
 
+    // Trigger successful login push notifications
+    sendPushNotification(user.email, 'Welcome back! ✨', 'You have logged in successfully to your Van Elvina account.', '/').catch(() => {});
+    sendPushNotification('admin', '🔑 Customer Login', `${user.name || 'User'} (${user.email}) logged in via Google`, '/admin/dashboard').catch(() => {});
+
     // Trigger successful login email notification
     sendEmail({
       to: user.email,
@@ -517,6 +525,9 @@ router.post('/signup', async (c) => {
 
     // Trigger admin push notification
     sendPushNotification('admin', '🆕 New Customer Registered', `${user.name || 'User'} (${user.email}) just signed up!`).catch(() => {});
+    
+    // Trigger customer welcome push notification
+    sendPushNotification(user.email, 'Welcome to Van Elvina! ✨', 'Thank you for creating an account with us. Enjoy shopping comfort!', '/').catch(() => {});
 
     // Trigger welcome / signup confirmation email notification
     sendEmail({
@@ -617,6 +628,10 @@ router.post('/login', async (c) => {
     if (updateErr) throw updateErr;
 
     const token = signUserToken(updatedUser);
+
+    // Trigger successful login push notifications
+    sendPushNotification(updatedUser.email, 'Welcome back! ✨', 'You have logged in successfully to your Van Elvina account.', '/').catch(() => {});
+    sendPushNotification('admin', '🔑 Customer Login', `${updatedUser.name || 'User'} (${updatedUser.email}) logged in`, '/admin/dashboard').catch(() => {});
 
     // Trigger successful login email notification
     sendEmail({
@@ -1073,6 +1088,9 @@ router.post('/admin/send-custom-email', authMiddleware, async (c) => {
     `;
 
     await sendEmail({ to, subject, html: htmlBody });
+    
+    // Trigger custom push notification to user
+    sendPushNotification(to, subject, emailBody, '/').catch(() => {});
     return c.json({ success: true, message: 'Email sent successfully' });
   } catch (err: any) {
     console.error('Send custom email error:', err);

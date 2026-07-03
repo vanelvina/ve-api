@@ -615,6 +615,9 @@ router.post('/', optionalAuth, async (c) => {
     // Trigger order confirmation email notification
     triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering COD order email:', err));
     triggerOrderPushNotification(order, 'Order Placed! 🎉', `Thank you! Your Order #${order.order_id} for ₹${order.total} has been received.`, `/account/orders/${order.id}`).catch(() => {});
+    
+    // Trigger admin push notification
+    sendPushNotification('admin', '🛍️ New COD Order Received!', `Order #${order.order_id} placed for ₹${order.total}`, '/admin/dashboard').catch(() => {});
 
     return c.json({
       success: true,
@@ -747,6 +750,9 @@ router.post('/verify-payment', optionalAuth, async (c) => {
       // Trigger order confirmation email notification
       triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering payment-confirmed order email:', err));
       triggerOrderPushNotification(order, 'Payment Confirmed! 💳', `Thank you! Your Order #${order.order_id} for ₹${order.total} payment is confirmed.`, `/account/orders/${order.id}`).catch(() => {});
+      
+      // Trigger admin push notification
+      sendPushNotification('admin', '🛍️ New Online Order Received!', `Order #${order.order_id} payment verified for ₹${order.total}`, '/admin/dashboard').catch(() => {});
 
       return c.json({
         success: true,
