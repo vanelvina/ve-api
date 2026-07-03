@@ -5,12 +5,25 @@ import { authMiddleware } from '../middleware/auth.ts';
 import webpush from 'npm:web-push';
 
 const vapidSubject = Deno.env.get('VAPID_SUBJECT') || 'mailto:support@vanelvina.com';
-const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY') || 'BGMpRAqfexagv3dgwiH7WidSTEzAfj0lMJak_4ZskcYD7N6ZFtZLlTrObVtNLXJOXzAMu6onqA0R0dFP9e-IRuA';
-const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY') || 'UXtE5KVz8rjEkABmlMY9e1qwsKUg0wH_f9xPJrehGzc';
+const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY') || '';
+const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY') || '';
 
-webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+if (vapidPublicKey && vapidPrivateKey) {
+  try {
+    webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+  } catch (err) {
+    console.error('Failed to set VAPID details for web push:', err);
+  }
+} else {
+  console.warn('VAPID public and private keys not set in environment. Web push notifications will be disabled.');
+}
 
 export async function sendPushNotification(targetEmail: string, title: string, body: string, url: string = '/') {
+  if (!vapidPublicKey || !vapidPrivateKey) {
+    console.warn('[Push] Skipping push notification: VAPID keys not configured in Deno environment.');
+    return;
+  }
+
   try {
     let subsQuery = supabase
       .from('inquiries')
