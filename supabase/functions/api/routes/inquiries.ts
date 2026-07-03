@@ -30,12 +30,15 @@ export async function sendPushNotification(targetEmail: string, title: string, b
       .select('*')
       .eq('status', 'push_subscription');
 
-    if (targetEmail === 'admin') {
+    const cleanTargetEmail = targetEmail ? targetEmail.toLowerCase().trim() : '';
+
+    if (cleanTargetEmail === 'admin') {
       subsQuery = subsQuery.or(
         'email.eq.admin,email.eq.support@vanelvina.com,email.like.%@vanelvina.com%,name.ilike.%admin%,name.ilike.%support%'
       );
     } else {
-      subsQuery = subsQuery.eq('email', targetEmail);
+      // Case-insensitive match to prevent case mismatches from blocking notifications
+      subsQuery = subsQuery.ilike('email', cleanTargetEmail);
     }
 
     const { data: subs, error } = await subsQuery;
@@ -202,6 +205,8 @@ router.post('/push-subscribe', async (c) => {
       return c.json({ message: 'Valid subscription object is required.' }, 400);
     }
 
+    const cleanEmail = email ? email.toLowerCase().trim() : 'anonymous';
+
     // Check if subscription endpoint already exists
     const { data: existing } = await supabase
       .from('inquiries')
@@ -222,7 +227,7 @@ router.post('/push-subscribe', async (c) => {
       const { error: updateErr } = await supabase
         .from('inquiries')
         .update({
-          email: email || duplicate.email || 'anonymous',
+          email: cleanEmail || duplicate.email || 'anonymous',
           name: name || duplicate.name || 'Anonymous',
           message: JSON.stringify(subscription)
         })
@@ -235,7 +240,7 @@ router.post('/push-subscribe', async (c) => {
         .from('inquiries')
         .insert({
           name: name || 'Push Subscription',
-          email: email || 'anonymous',
+          email: cleanEmail,
           phone: '-',
           subject: 'push_subscription',
           message: JSON.stringify(subscription),
@@ -247,7 +252,7 @@ router.post('/push-subscribe', async (c) => {
 
     // Try sending a welcome notification to test the push channel
     sendPushNotification(
-      email || 'anonymous',
+      cleanEmail,
       'Van Elvina ✨',
       'Native Push Notifications successfully activated! Enjoy shopping comfort.',
       '/'
