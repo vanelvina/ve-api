@@ -33,17 +33,24 @@ export async function sendPushNotification(targetEmail: string, title: string, b
     const cleanTargetEmail = targetEmail ? targetEmail.toLowerCase().trim() : '';
 
     if (cleanTargetEmail === 'admin') {
+      // Match admin subscriptions: email is 'admin', contains @vanelvina.com, or name contains admin/support
+      // NOTE: Supabase .or() uses PostgREST syntax — wildcards are * not %
       subsQuery = subsQuery.or(
-        'email.eq.admin,email.eq.support@vanelvina.com,email.like.%@vanelvina.com%,name.ilike.%admin%,name.ilike.%support%'
+        'email.eq.admin,email.ilike.*@vanelvina.com*,name.ilike.*admin*,name.ilike.*support*'
       );
     } else {
-      // Case-insensitive match to prevent case mismatches from blocking notifications
+      // Case-insensitive email match for regular customers
       subsQuery = subsQuery.ilike('email', cleanTargetEmail);
     }
 
     const { data: subs, error } = await subsQuery;
 
-    if (error || !subs || subs.length === 0) return;
+    if (error) {
+      console.error('[Push] Supabase query error:', error);
+      return;
+    }
+    if (!subs || subs.length === 0) return;
+
 
     for (const subRow of subs) {
       try {

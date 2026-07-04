@@ -1077,7 +1077,7 @@ router.post('/admin/send-custom-email', authMiddleware, async (c) => {
 
     const htmlBody = `
       <div style="font-family: 'Georgia', serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C;">
-        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <div style="width: 100%; max-width: 100%; background: white; padding: 20px 0;">
           <h2 style="color: #8A4F5A; margin-top: 0; text-align: center;">Van Elvina</h2>
           <div style="border-top: 1px solid #E8C5CA; margin: 15px 0;"></div>
           <p style="white-space: pre-line; font-size: 14px; color: #555;">${emailBody}</p>

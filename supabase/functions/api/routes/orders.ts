@@ -100,7 +100,7 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
       subject = `Order Confirmed: ${orderFormatted.orderId} - Van Elvina`;
       htmlContent = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C; margin: 0;">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(92,43,53,0.06); border: 1px solid rgba(232, 197, 202, 0.4);">
+          <div style="width: 100%; max-width: 100%; background: white; overflow: hidden;">
             <!-- Logo -->
             <div style="padding: 24px; text-align: center; border-bottom: 1px solid #FAF0F1;">
               <img src="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/logo.png" alt="Van Elvina" style="height: 38px; width: auto; display: inline-block; max-width: 100%;" />
@@ -177,7 +177,7 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
       subject = `Shipping Update: ${orderFormatted.orderId} - ${orderFormatted.orderStatus.replace(/_/g, ' ').toUpperCase()}`;
       htmlContent = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C; margin: 0;">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(92,43,53,0.06); border: 1px solid rgba(232, 197, 202, 0.4);">
+          <div style="width: 100%; max-width: 100%; background: white; overflow: hidden;">
             <!-- Logo -->
             <div style="padding: 24px; text-align: center; border-bottom: 1px solid #FAF0F1;">
               <img src="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/logo.png" alt="Van Elvina" style="height: 38px; width: auto; display: inline-block; max-width: 100%;" />
@@ -229,7 +229,7 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
       subject = `Return Request Received: ${orderFormatted.orderId} - Van Elvina`;
       htmlContent = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C; margin: 0;">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(92,43,53,0.06); border: 1px solid rgba(232, 197, 202, 0.4);">
+          <div style="width: 100%; max-width: 100%; background: white; overflow: hidden;">
             <!-- Logo -->
             <div style="padding: 24px; text-align: center; border-bottom: 1px solid #FAF0F1;">
               <img src="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/logo.png" alt="Van Elvina" style="height: 38px; width: auto; display: inline-block; max-width: 100%;" />
@@ -286,7 +286,7 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
       subject = `Exchange Request Received: ${orderFormatted.orderId} - Van Elvina`;
       htmlContent = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #FDF8F5; color: #2C2C2C; margin: 0;">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(92,43,53,0.06); border: 1px solid rgba(232, 197, 202, 0.4);">
+          <div style="width: 100%; max-width: 100%; background: white; overflow: hidden;">
             <!-- Logo -->
             <div style="padding: 24px; text-align: center; border-bottom: 1px solid #FAF0F1;">
               <img src="${Deno.env.get('APP_URL') || 'https://vanelvina.com'}/logo.png" alt="Van Elvina" style="height: 38px; width: auto; display: inline-block; max-width: 100%;" />
