@@ -33,6 +33,8 @@ const mapProductFromSupabase = (prod: any) => {
       color: v.color || '',
       colorHex: v.colorHex || '',
       sizes: v.sizes || [],
+      stockPerSize: v.stockPerSize || {},
+      skuPerSize: v.skuPerSize || {},
       images: v.images || []
     })),
     inStock: prod.in_stock !== false,
@@ -87,6 +89,8 @@ const mapProductToSupabase = (body: any) => {
       color: v.color || '',
       colorHex: v.colorHex || '',
       sizes: v.sizes || [],
+      stockPerSize: v.stockPerSize || {},
+      skuPerSize: v.skuPerSize || {},
       images: v.images || []
     }));
   }
@@ -158,7 +162,77 @@ router.get('/', async (c) => {
   }
 });
 
+// GET single product by slug (used for SSR og:image meta — must come before /:id)
+router.get('/slug/:slug', async (c) => {
+  try {
+    const slug = c.req.param('slug');
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('slug', slug)
+      .single();
+
+    if (error || !data) return c.json({ message: 'Product not found' }, 404);
+    return c.json(mapProductFromSupabase(data));
+  } catch (error: any) {
+    return c.json({ message: error.message }, 500);
+  }
+});
+
 // POST add new product
+
+// PATCH /products/:id/decrement-stock  — called post-order to reduce per-size inventory
+// Body: { items: [{ color: string, size: string, quantity: number }] }
+router.patch('/:id/decrement-stock', async (c) => {
+  try {
+    const productId = c.req.param('id');
+    const { items } = await c.req.json().catch(() => ({ items: [] }));
+    if (!items?.length) return c.json({ ok: true });
+
+    // Fetch current product
+    const { data: prod, error: fetchError } = await supabase
+      .from('products')
+      .select('variants, stock_count')
+      .eq('id', productId)
+      .single();
+
+    if (fetchError || !prod) return c.json({ message: 'Product not found' }, 404);
+
+    const variants: any[] = prod.variants || [];
+    let totalDecrement = 0;
+
+    for (const item of items) {
+      const variantIdx = variants.findIndex(
+        (v: any) => v.color?.toLowerCase() === (item.color || '').toLowerCase()
+      );
+      if (variantIdx === -1) continue;
+      const variant = variants[variantIdx];
+      const sizeKey = item.size || '';
+      const qty = Math.max(1, item.quantity || 1);
+      const currentStock = variant.stockPerSize?.[sizeKey] ?? null;
+      if (currentStock !== null) {
+        variant.stockPerSize[sizeKey] = Math.max(0, currentStock - qty);
+      }
+      totalDecrement += qty;
+    }
+
+    // Persist updated variants + decrement top-level stock count
+    const newStockCount = Math.max(0, (prod.stock_count || 0) - totalDecrement);
+    const { error: updateError } = await supabase
+      .from('products')
+      .update({ variants, stock_count: newStockCount })
+      .eq('id', productId);
+
+    if (updateError) throw updateError;
+    return c.json({ ok: true });
+  } catch (error: any) {
+    console.error('decrement-stock error:', error);
+    return c.json({ message: error.message }, 500);
+  }
+});
+
+
+
 router.post('/', authMiddleware, async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));

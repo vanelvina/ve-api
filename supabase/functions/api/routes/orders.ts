@@ -82,6 +82,51 @@ const triggerOrderPushNotification = async (order: any, title: string, body: str
   }
 };
 
+// Fire-and-forget: decrement per-size stock for each item in the order
+const decrementStockForOrder = (order: any) => {
+  try {
+    const items: any[] = order.items || [];
+    const byProduct: Record<string, { color: string; size: string; quantity: number }[]> = {};
+    for (const item of items) {
+      const pid = item.productId || item.product_id;
+      if (!pid) continue;
+      if (!byProduct[pid]) byProduct[pid] = [];
+      byProduct[pid].push({ color: item.color || '', size: item.size || '', quantity: item.quantity || 1 });
+    }
+    for (const [productId, lineItems] of Object.entries(byProduct)) {
+      supabase
+        .from('products')
+        .select('id, variants, stock_count')
+        .eq('id', productId)
+        .single()
+        .then(({ data: prod }: any) => {
+          if (!prod) return;
+          const variants: any[] = prod.variants || [];
+          let totalDecrement = 0;
+          for (const li of lineItems) {
+            const vIdx = variants.findIndex((v: any) => v.color?.toLowerCase() === li.color.toLowerCase());
+            if (vIdx === -1) continue;
+            const v = variants[vIdx];
+            if (!v.stockPerSize) v.stockPerSize = {};
+            const cur = v.stockPerSize[li.size] ?? null;
+            if (cur !== null) v.stockPerSize[li.size] = Math.max(0, cur - li.quantity);
+            totalDecrement += li.quantity;
+          }
+          supabase
+            .from('products')
+            .update({ variants, stock_count: Math.max(0, (prod.stock_count || 0) - totalDecrement) })
+            .eq('id', productId)
+            .then(({ error }: any) => { if (error) console.error('stock decrement error:', error); });
+        })
+        .catch((err: any) => console.error('stock decrement fetch error:', err));
+    }
+  } catch (err) {
+    console.error('decrementStockForOrder error:', err);
+  }
+};
+
+
+
 const triggerOrderEmail = async (order: any, type: string, note = '') => {
   try {
     const customer = await getOrderCustomerInfo(order);
@@ -615,6 +660,7 @@ router.post('/', optionalAuth, async (c) => {
     // Trigger order confirmation email notification
     triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering COD order email:', err));
     triggerOrderPushNotification(order, 'Order Placed! 🎉', `Thank you! Your Order #${order.order_id} for ₹${order.total} has been received.`, `/account/orders/${order.id}`).catch(() => {});
+    decrementStockForOrder(order);
     
     // Trigger admin push notification
     sendPushNotification('admin', '🛍️ New COD Order Received!', `Order #${order.order_id} placed for ₹${order.total}`, '/admin/dashboard').catch(() => {});
@@ -750,6 +796,7 @@ router.post('/verify-payment', optionalAuth, async (c) => {
       // Trigger order confirmation email notification
       triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering payment-confirmed order email:', err));
       triggerOrderPushNotification(order, 'Payment Confirmed! 💳', `Thank you! Your Order #${order.order_id} for ₹${order.total} payment is confirmed.`, `/account/orders/${order.id}`).catch(() => {});
+      decrementStockForOrder(order);
       
       // Trigger admin push notification
       sendPushNotification('admin', '🛍️ New Online Order Received!', `Order #${order.order_id} payment verified for ₹${order.total}`, '/admin/dashboard').catch(() => {});
