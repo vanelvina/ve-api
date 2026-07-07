@@ -175,11 +175,13 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
                     </tr>
                   </thead>
                   <tbody>
-                    ${orderFormatted.items.map((item: any) => `
+                  ${orderFormatted.items.map((item: any) => `
                       <tr style="border-bottom: 1px solid rgba(232, 197, 202, 0.3);">
                         <td style="padding: 10px 0; color: #4A4A4A;">
                           <div style="font-weight: bold;">${item.name}</div>
-                          ${item.size ? `<span style="font-size: 11px; color: #888;">Size: ${item.size}</span>` : ''}
+                          ${item.color ? `<span style="font-size: 11px; color: #888;">${item.color}</span>` : ''}
+                          ${item.size ? `<span style="font-size: 11px; color: #888;"> · Size: ${item.size}</span>` : ''}
+                          ${item.sku ? `<div style="font-size: 10px; color: #aaa; font-family: monospace; margin-top: 2px;">SKU: ${item.sku}</div>` : ''}
                         </td>
                         <td style="padding: 10px 0; text-align: center; color: #4A4A4A; vertical-align: middle;">${item.quantity}</td>
                         <td style="padding: 10px 0; text-align: right; color: #4A4A4A; vertical-align: middle; font-weight: bold;">₹${item.price.toLocaleString('en-IN')}</td>
@@ -524,6 +526,7 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
               <thead>
                 <tr style="background-color: #FAF0F1; border-bottom: 1px solid #E8C5CA; text-align: left;">
                   <th style="padding: 10px; font-weight: bold;">Product Name</th>
+                  <th style="padding: 10px; font-weight: bold;">SKU</th>
                   <th style="padding: 10px; font-weight: bold;">Variant/Color</th>
                   <th style="padding: 10px; font-weight: bold; text-align: center;">Size</th>
                   <th style="padding: 10px; font-weight: bold; text-align: center;">Qty</th>
@@ -534,6 +537,7 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
                 ${orderFormatted.items.map((item: any) => `
                   <tr style="border-bottom: 1px solid rgba(232, 197, 202, 0.3);">
                     <td style="padding: 10px; font-size: 13px;">${item.name}</td>
+                    <td style="padding: 10px; font-size: 12px; font-family: monospace; color: #666;">${item.sku || '—'}</td>
                     <td style="padding: 10px; font-size: 13px;">${item.color || 'N/A'}</td>
                     <td style="padding: 10px; font-size: 13px; text-align: center;">${item.size || 'Standard'}</td>
                     <td style="padding: 10px; font-size: 13px; text-align: center;">${item.quantity}</td>
@@ -541,7 +545,7 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
                   </tr>
                 `).join('')}
                 <tr style="font-weight: bold; color: #8A4F5A;">
-                  <td colspan="4" style="padding: 10px; border-top: 2px solid #8A4F5A; text-align: left;">Total Order Value</td>
+                  <td colspan="5" style="padding: 10px; border-top: 2px solid #8A4F5A; text-align: left;">Total Order Value</td>
                   <td style="padding: 10px; border-top: 2px solid #8A4F5A; text-align: right;">₹${orderFormatted.total.toLocaleString('en-IN')}</td>
                 </tr>
               </tbody>
@@ -612,7 +616,8 @@ router.post('/', optionalAuth, async (c) => {
       price: item.price,
       quantity: item.quantity,
       size: item.size || 'Standard',
-      color: item.color || '',
+      color: item.color || item.variantColor || '',
+      sku: item.sku || '',
       image: item.image || ''
     }));
 
