@@ -279,10 +279,16 @@ const triggerOrderEmail = async (order, type, note = '') => {
 
       if (type === 'confirmed') {
         const supportSubject = `New Order Received: ${orderFormatted.orderId}`;
+        const productItems = (orderFormatted.items || []).filter(i => i.name !== 'Gift Wrapper');
+        const giftWrapItem = (orderFormatted.items || []).find(i => i.name === 'Gift Wrapper');
+        const productText = productItems.map(item => `${item.quantity} x ${item.name}`).join(', ');
+        const itemsLine = productText + (giftWrapItem ? ' and 1 x Gift Wrapper' : '');
+
         const supportHtml = `
-          <div style="font-family: Arial, sans-serif; padding: 20px;">
-            <h2 style="color: #8A4F5A;">New Order Received</h2>
+          <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; color: #2C2C2C;">
+            <h2 style="color: #8A4F5A; margin-top: 0;">New Order Received</h2>
             <p>A new order <strong>${orderFormatted.orderId}</strong> has just been placed by <strong>${customer.name || 'Customer'}</strong> (${customer.email}).</p>
+            <p><strong>Items:</strong> ${itemsLine}</p>
             <p><strong>Order Total:</strong> ₹${orderFormatted.total.toLocaleString('en-IN')}</p>
             <p>Please check the <a href="${process.env.APP_URL || 'http://localhost:3000'}/admin/dashboard">admin dashboard</a> for full details.</p>
           </div>
