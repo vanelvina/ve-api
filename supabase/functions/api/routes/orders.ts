@@ -17,6 +17,8 @@ function formatOrderForFrontend(order: any) {
     ...order,
     _id: order.id,
     orderId: order.order_id,
+    couponCode: order.coupon_code || null,
+    coupon_code: order.coupon_code || null,
     userId: order.users ? { _id: order.users.id, name: order.users.name, email: order.users.email } : order.user_id,
     paymentMethod: order.payment_method,
     paymentStatus: order.payment_status,
@@ -444,7 +446,15 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
                     ${orderFormatted.items.map((item: any) => `
                       <tr style="border-bottom: 1px solid rgba(232, 197, 202, 0.3); vertical-align: middle;">
                         <td style="padding: 10px 8px; width: 60px;">
-                          ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 52px; height: 60px; object-fit: cover; border-radius: 6px; display: block; border: 1px solid #FAF0F1;" />` : '<div style="width:52px;height:60px;background:#FAF0F1;border-radius:6px;"></div>'}
+                          ${(() => {
+                            const appUrl = Deno.env.get('APP_URL') || 'https://vanelvina.com';
+                            const imgSrc = item.image
+                              ? (item.image.startsWith('http') ? item.image : `${appUrl}${item.image}`)
+                              : null;
+                            return imgSrc
+                              ? `<img src="${imgSrc}" alt="${item.name}" style="width: 52px; height: 60px; object-fit: cover; border-radius: 6px; display: block; border: 1px solid #FAF0F1;" />`
+                              : '<div style="width:52px;height:60px;background:#FAF0F1;border-radius:6px;"></div>';
+                          })()}
                         </td>
                         <td style="padding: 10px 8px; font-size: 13px;">
                           <strong style="display: block; color: #2C2C2C;">${item.name}</strong>
@@ -466,6 +476,10 @@ const triggerOrderEmail = async (order: any, type: string, note = '') => {
                       <td colspan="3" style="padding: 4px 10px; font-size: 12px; color: #555;">Discount</td>
                       <td style="padding: 4px 10px; font-size: 12px; text-align: right; color: #22a722;">-₹${orderFormatted.discount.toLocaleString('en-IN')}</td>
                     </tr>
+                    ${orderFormatted.coupon_code ? `<tr style="background: #FFF8E8;">
+                      <td colspan="3" style="padding: 4px 10px; font-size: 12px; color: #8A6A00; font-weight: bold;">🏷️ Coupon Used</td>
+                      <td style="padding: 4px 10px; font-size: 12px; text-align: right; color: #8A6A00; font-weight: bold; font-family: monospace;">${orderFormatted.coupon_code}</td>
+                    </tr>` : ''}
                     <tr style="font-weight: bold; font-size: 15px; color: #8A4F5A;">
                       <td colspan="3" style="padding: 12px 10px; border-top: 2px solid #8A4F5A;">Grand Total</td>
                       <td style="padding: 12px 10px; border-top: 2px solid #8A4F5A; text-align: right;">₹${orderFormatted.total.toLocaleString('en-IN')}</td>
@@ -597,7 +611,7 @@ router.post('/', optionalAuth, async (c) => {
     }
     const {
       items, shippingAddress, paymentMethod, shippingMethod,
-      subtotal, shippingFee, discount, total, guestInfo
+      subtotal, shippingFee, discount, total, guestInfo, couponCode
     } = body;
 
     if (!items?.length) {
@@ -618,7 +632,8 @@ router.post('/', optionalAuth, async (c) => {
       size: item.size || 'Standard',
       color: item.color || item.variantColor || '',
       sku: item.sku || '',
-      image: item.image || ''
+      image: item.image || '',
+      isReturnable: item.isReturnable !== false
     }));
 
     const userPayload = c.get('user');
@@ -633,6 +648,7 @@ router.post('/', optionalAuth, async (c) => {
       shipping_fee: shippingFee || 0,
       discount: discount || 0,
       total: total || 0,
+      coupon_code: couponCode || null,
       guest_info: guestInfo || null,
       status_history: [{ status: 'placed', timestamp: new Date().toISOString(), note: '' }],
       payment_status: 'pending',
@@ -734,7 +750,7 @@ router.post('/verify-payment', optionalAuth, async (c) => {
       razorpay_payment_id,
       razorpay_signature,
       items, shippingAddress, paymentMethod, shippingMethod,
-      subtotal, shippingFee, discount, total, guestInfo
+      subtotal, shippingFee, discount, total, guestInfo, couponCode
     } = body;
 
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
@@ -751,7 +767,8 @@ router.post('/verify-payment', optionalAuth, async (c) => {
         quantity: item.quantity,
         size: item.size || 'Standard',
         color: item.color || '',
-        image: item.image || ''
+        image: item.image || '',
+        isReturnable: item.isReturnable !== false
       }));
 
       const userPayload = c.get('user');
@@ -766,6 +783,7 @@ router.post('/verify-payment', optionalAuth, async (c) => {
         shipping_fee: shippingFee || 0,
         discount: discount || 0,
         total: total || 0,
+        coupon_code: couponCode || null,
         razorpay_order_id,
         razorpay_payment_id,
         razorpay_signature,
@@ -993,6 +1011,80 @@ router.put('/:id/status', authMiddleware, async (c) => {
     return c.json(formatOrderForFrontend(updatedOrder));
   } catch (err) {
     console.error('update order status error:', err);
+    return c.json({ message: 'Server error' }, 500);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/orders/:id/cancel — Customer cancels their own order (pre-ship only)
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/:id/cancel', userAuthMiddleware, async (c) => {
+  try {
+    let body;
+    try { body = await c.req.json(); } catch { body = {}; }
+    const { reason } = body;
+    const orderId = toUUID(c.req.param('id'));
+    const userPayload = c.get('user');
+    const userId = toUUID(userPayload.id);
+
+    const { data: order, error: fetchErr } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (fetchErr) throw fetchErr;
+    if (!order) return c.json({ message: 'Order not found' }, 404);
+
+    // Block cancellation once the order has been shipped or beyond
+    const NON_CANCELLABLE = ['shipped', 'out_for_delivery', 'delivered', 'cancelled',
+      'return_requested', 'exchange_requested', 'returned', 'exchanged'];
+    if (NON_CANCELLABLE.includes(order.order_status)) {
+      return c.json({
+        message: 'This order can no longer be cancelled as it has already been shipped.'
+      }, 400);
+    }
+
+    const newHistory = [...(order.status_history || [])];
+    newHistory.push({
+      status: 'cancelled',
+      timestamp: new Date().toISOString(),
+      note: reason || 'Cancelled by customer'
+    });
+
+    const { data: updatedOrder, error: updateErr } = await supabase
+      .from('orders')
+      .update({
+        order_status: 'cancelled',
+        status_history: newHistory,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', orderId)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // Notify customer
+    triggerOrderEmail(updatedOrder, 'status_updated', reason || 'Cancelled by customer').catch(() => {});
+    triggerOrderPushNotification(
+      updatedOrder,
+      'Order Cancelled ❌',
+      `Your Order #${updatedOrder.order_id} has been cancelled.`,
+      `/account/orders/${updatedOrder.id}`
+    ).catch(() => {});
+
+    // Notify admin
+    sendPushNotification(
+      'admin',
+      '❌ Order Cancelled by Customer',
+      `Order #${updatedOrder.order_id} was cancelled by the customer.`
+    ).catch(() => {});
+
+    return c.json(formatOrderForFrontend(updatedOrder));
+  } catch (err) {
+    console.error('cancel order error:', err);
     return c.json({ message: 'Server error' }, 500);
   }
 });

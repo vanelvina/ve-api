@@ -2,6 +2,7 @@ import { Hono } from 'https://deno.land/x/hono@v3.11.7/mod.ts';
 import { supabase } from '../utils/supabase.ts';
 import { toUUID } from '../utils/uuid.ts';
 import { authMiddleware } from '../middleware/auth.ts';
+import { sendEmail } from '../utils/email.ts';
 import webpush from 'npm:web-push';
 
 const vapidSubject = Deno.env.get('VAPID_SUBJECT') || 'mailto:support@vanelvina.com';
@@ -111,6 +112,106 @@ router.post('/', async (c) => {
       .single();
 
     if (error) throw error;
+
+    // ── Notify support@vanelvina.com ─────────────────────────────────────────
+    const submittedAt = new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+
+    const adminEmailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+      <body style="margin:0;padding:0;background:#FAF8F5;font-family:'Helvetica Neue',Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#FAF8F5;padding:32px 16px;">
+          <tr><td align="center">
+            <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.07);">
+
+              <!-- Header -->
+              <tr><td style="background:linear-gradient(135deg,#5C2D3E 0%,#8A4F5A 100%);padding:28px 32px;">
+                <table width="100%"><tr>
+                  <td>
+                    <div style="font-family:Georgia,serif;font-size:20px;color:#ffffff;font-weight:bold;letter-spacing:0.5px;">Van Elvina</div>
+                    <div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:2px;letter-spacing:1px;text-transform:uppercase;">New Customer Enquiry</div>
+                  </td>
+                  <td align="right">
+                    <div style="background:rgba(255,255,255,0.15);border-radius:10px;padding:8px 14px;font-size:11px;color:#fff;">📬 New Message</div>
+                  </td>
+                </tr></table>
+              </td></tr>
+
+              <!-- Body -->
+              <tr><td style="padding:28px 32px;">
+                <p style="margin:0 0 20px;font-size:14px;color:#555;">A customer has submitted a contact enquiry. Here are the details:</p>
+
+                <!-- Details card -->
+                <table width="100%" style="background:#FAF8F5;border-radius:12px;border:1px solid #F0E4E7;border-collapse:separate;">
+                  <tr>
+                    <td style="padding:14px 18px;border-bottom:1px solid #F0E4E7;">
+                      <span style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.8px;">Name</span><br>
+                      <span style="font-size:14px;font-weight:600;color:#2C2C2C;">${name}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 18px;border-bottom:1px solid #F0E4E7;">
+                      <span style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.8px;">Email</span><br>
+                      <a href="mailto:${email}" style="font-size:14px;font-weight:600;color:#8A4F5A;text-decoration:none;">${email}</a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 18px;border-bottom:1px solid #F0E4E7;">
+                      <span style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.8px;">Phone</span><br>
+                      <span style="font-size:14px;font-weight:600;color:#2C2C2C;">${phone}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 18px;border-bottom:1px solid #F0E4E7;">
+                      <span style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.8px;">Query Type</span><br>
+                      <span style="font-size:14px;font-weight:600;color:#2C2C2C;">${queryType}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 18px;">
+                      <span style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.8px;">Message</span><br>
+                      <span style="font-size:14px;color:#2C2C2C;line-height:1.6;white-space:pre-wrap;">${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- CTA -->
+                <div style="margin-top:24px;text-align:center;">
+                  <a href="https://vanelvina.com/admin/dashboard" style="display:inline-block;background:#5C2D3E;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:10px;font-size:13px;font-weight:bold;letter-spacing:0.5px;">Open Admin Dashboard →</a>
+                </div>
+
+                <p style="margin:20px 0 0;font-size:11px;color:#aaa;text-align:center;">Received on ${submittedAt} IST</p>
+              </td></tr>
+
+              <!-- Footer -->
+              <tr><td style="background:#FAF0F1;padding:16px 32px;text-align:center;border-top:1px solid #F0E4E7;">
+                <p style="margin:0;font-size:11px;color:#aaa;">This email was automatically sent to support@vanelvina.com</p>
+              </td></tr>
+
+            </table>
+          </td></tr>
+        </table>
+      </body>
+      </html>
+    `;
+
+    sendEmail({
+      to: 'support@vanelvina.com',
+      subject: `📬 New Enquiry from ${name} — ${queryType}`,
+      html: adminEmailHtml
+    }).catch(err => console.error('Failed to send inquiry notification email:', err));
+
+    // Push notify admin too
+    sendPushNotification(
+      'admin',
+      `📬 New Enquiry from ${name}`,
+      `${queryType}: ${message.substring(0, 80)}${message.length > 80 ? '…' : ''}`
+    ).catch(() => {});
 
     return c.json({ success: true, inquiry: mapInquiry(inquiry) }, 201);
   } catch (error: any) {
