@@ -187,7 +187,7 @@ router.post('/verify-otp', async (c) => {
     } catch {
       return c.json({ message: 'Invalid JSON body' }, 400);
     }
-    const { identifier, otp, name } = body;
+    const { identifier, otp, name, password } = body;
     if (!identifier || !otp) {
       return c.json({ message: 'Email and OTP required' }, 400);
     }
@@ -230,11 +230,13 @@ router.post('/verify-otp', async (c) => {
     let user = existingUser;
 
     if (!existingUser) {
+      const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
       const { data: newUser, error: createErr } = await supabase
         .from('users')
         .insert({
           email,
           name: name?.trim() || email.split('@')[0],
+          password: hashedPassword,
           auth_method: 'email',
           is_verified: true,
           is_guest: false,
