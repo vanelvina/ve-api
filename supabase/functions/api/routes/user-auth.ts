@@ -14,7 +14,12 @@ const resend = new Resend(Deno.env.get('RESEND_API_KEY') || 're_dummy_key_for_de
 const googleClient = new OAuth2Client(Deno.env.get('GOOGLE_CLIENT_ID'));
 
 const USER_JWT_SECRET = Deno.env.get('USER_JWT_SECRET') || 've_user_jwt_secret_vanelvina_2026_secure';
-const IS_DEV = Deno.env.get('NODE_ENV') === 'development';
+// Bypass email if no real API key is configured or explicitly in dev mode
+const RESEND_KEY = Deno.env.get('RESEND_API_KEY') || '';
+const IS_DEV = Deno.env.get('NODE_ENV') === 'development'
+  || !RESEND_KEY
+  || RESEND_KEY === 're_placeholder_add_your_resend_key'
+  || RESEND_KEY === 're_dummy_key_for_dev_bypass';
 
 // ─── Helper: Generate 6-digit OTP ────────────────────────────────────────────
 const generateOTP = () => {
@@ -67,13 +72,14 @@ function formatUserForFrontend(user: any) {
 
 // ─── Helper: Send OTP via Resend ─────────────────────────────────────────────
 const sendOTPEmail = async (email: string, otp: string, name = '') => {
-  if (IS_DEV && Deno.env.get('RESEND_API_KEY') === 're_placeholder_add_your_resend_key') {
-    console.log(`[DEV] OTP for ${email}: ${otp}`);
+  // Bypass email sending when no real Resend key is configured
+  if (IS_DEV) {
+    console.log(`[EMAIL BYPASS] OTP for ${email}: ${otp}`);
     return { success: true };
   }
   try {
     const { error } = await resend.emails.send({
-      from: 'Van Elvina <support@vanelvina.com>',
+      from: Deno.env.get('RESEND_FROM_EMAIL') || 'Van Elvina <onboarding@resend.dev>',
       to: email,
       subject: `${otp} is your Van Elvina verification code`,
       html: `
@@ -106,11 +112,18 @@ const sendOTPEmail = async (email: string, otp: string, name = '') => {
         </html>
       `,
     });
-    if (error) throw error;
+    if (error) {
+      console.error('Resend API error:', JSON.stringify(error));
+      throw new Error(
+        typeof error === 'object' && 'message' in error
+          ? (error as any).message
+          : 'Email delivery failed. Please check Resend configuration.'
+      );
+    }
     return { success: true };
   } catch (err: any) {
-    console.error('Resend error:', err);
-    throw new Error('Failed to send verification email');
+    console.error('sendOTPEmail error:', err?.message || err);
+    throw new Error(err?.message || 'Failed to send verification email');
   }
 };
 
