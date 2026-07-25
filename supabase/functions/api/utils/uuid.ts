@@ -5,8 +5,15 @@
 export function toUUID(mongoId: string | null | undefined): string | null {
   if (!mongoId) return null;
   const str = mongoId.toString().trim();
-  if (str.length !== 24) return str;
-  return `${str.substring(0, 8)}-${str.substring(8, 12)}-${str.substring(12, 16)}-${str.substring(16, 20)}-${str.substring(20, 24)}00000000`;
+  if (!str || str === 'null' || str === 'undefined') return null;
+  if (str.length === 24 && /^[0-9a-fA-F]{24}$/.test(str)) {
+    return `${str.substring(0, 8)}-${str.substring(8, 12)}-${str.substring(12, 16)}-${str.substring(16, 20)}-${str.substring(20, 24)}00000000`;
+  }
+  const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  if (uuidRegex.test(str)) {
+    return str;
+  }
+  return null;
 }
 
 /**

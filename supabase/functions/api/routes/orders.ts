@@ -728,9 +728,12 @@ router.post('/', optionalAuth, async (c) => {
       orderId: order.order_id,
       order: formatOrderForFrontend(order),
     }, 201);
-  } catch (err) {
+  } catch (err: any) {
     console.error('Place order error:', err);
-    return c.json({ message: 'Failed to place order' }, 500);
+    return c.json({
+      message: err.message || (typeof err === 'string' ? err : 'Failed to place order'),
+      details: err.details || err.hint || err.code || err
+    }, 500);
   }
 });
 
