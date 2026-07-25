@@ -813,7 +813,7 @@ router.post('/verify-payment', optionalAuth, async (c) => {
 
       const userPayload = c.get('user');
 
-      const orderPayload = {
+      const orderPayload: any = {
         order_id: generateOrderId(),
         user_id: userPayload ? toUUID(userPayload.id) : null,
         items: mappedItems,
@@ -823,7 +823,6 @@ router.post('/verify-payment', optionalAuth, async (c) => {
         shipping_fee: shippingFee || 0,
         discount: discount || 0,
         total: total || 0,
-        coupon_code: couponCode || null,
         razorpay_order_id,
         razorpay_payment_id,
         razorpay_signature,
@@ -832,6 +831,9 @@ router.post('/verify-payment', optionalAuth, async (c) => {
         payment_status: 'paid',
         order_status: 'placed'
       };
+      if (couponCode) {
+        orderPayload.coupon_code = couponCode;
+      }
 
       
       let { data: order, error } = await supabase

@@ -183,16 +183,19 @@ export async function createShipment(order: any): Promise<ShiprocketResult> {
       weight: 0.5,
     };
 
+    console.log(`[Shiprocket] Creating order ${order.order_id} at pickup location "${PICKUP_LOCATION}"...`);
     const created = await shiprocketFetch('/orders/create/adhoc', {
       method: 'POST',
       body: JSON.stringify(createPayload),
     });
 
+    console.log(`[Shiprocket] Create order response for ${order.order_id}:`, JSON.stringify(created));
+
     if (!created) {
-      return { success: false, error: 'Shiprocket order creation returned null' };
+      return { success: false, error: 'Shiprocket order creation returned null. Check SHIPROCKET_EMAIL and SHIPROCKET_PASSWORD secrets.' };
     }
     if (created.status_code && created.status_code !== 1) {
-      return { success: false, error: created.message || 'Order creation failed' };
+      return { success: false, error: created.message || JSON.stringify(created) || 'Order creation failed' };
     }
 
     const shiprocketOrderId: number = created.order_id;
