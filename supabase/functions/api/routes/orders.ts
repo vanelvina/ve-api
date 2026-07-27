@@ -11,32 +11,67 @@ import { createShipment, cancelShipment } from '../utils/shiprocket.ts';
 
 const router = new Hono();
 
+// Test endpoint to verify Shiprocket credentials & order creation live
+router.get('/test-shiprocket', async (c) => {
+  try {
+    const { data: latestOrder, error } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !latestOrder) {
+      return c.json({ success: false, message: 'No orders found in database to test', error });
+    }
+
+    const emailSecret = Deno.env.get('SHIPROCKET_EMAIL');
+    const passwordSecret = Deno.env.get('SHIPROCKET_PASSWORD');
+    const pickupSecret = Deno.env.get('SHIPROCKET_PICKUP_LOCATION');
+
+    const result = await createShipment(latestOrder);
+
+    return c.json({
+      latestOrderId: latestOrder.order_id,
+      secretsConfigured: {
+        hasEmail: Boolean(emailSecret),
+        hasPassword: Boolean(passwordSecret),
+        pickupLocation: pickupSecret || 'Primary (default)'
+      },
+      shiprocketResult: result
+    });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || err }, 500);
+  }
+});
+
 // ─── Fire-and-forget: push order to Shiprocket, save AWB back to DB ─────────
-const pushToShiprocket = (order: any) => {
-  createShipment(order)
-    .then(async (result) => {
-      if (!result.success && !result.shiprocketOrderId) {
-        console.error(`[Shiprocket] Shipment creation failed for order ${order.order_id}:`, result.error);
-        return;
-      }
-      // Persist Shiprocket IDs to our DB order row
-      const updatePayload: any = { shipment_status: 'processing' };
-      if (result.shiprocketOrderId) updatePayload.shiprocket_order_id = String(result.shiprocketOrderId);
-      if (result.shipmentId) updatePayload.shiprocket_shipment_id = String(result.shipmentId);
-      if (result.awbCode) updatePayload.awb_code = result.awbCode;
-      if (result.courierName) updatePayload.courier_name = result.courierName;
-      if (result.pickupScheduledDate) updatePayload.pickup_scheduled_date = result.pickupScheduledDate;
-      if (result.error) console.warn(`[Shiprocket] Partial success for ${order.order_id}: ${result.error}`);
+const pushToShiprocket = async (order: any) => {
+  try {
+    const result = await createShipment(order);
+    if (!result.success && !result.shiprocketOrderId) {
+      console.error(`[Shiprocket] Shipment creation failed for order ${order.order_id}:`, result.error);
+      return;
+    }
+    // Persist Shiprocket IDs to our DB order row
+    const updatePayload: any = { shipment_status: 'processing' };
+    if (result.shiprocketOrderId) updatePayload.shiprocket_order_id = String(result.shiprocketOrderId);
+    if (result.shipmentId) updatePayload.shiprocket_shipment_id = String(result.shipmentId);
+    if (result.awbCode) updatePayload.awb_code = result.awbCode;
+    if (result.courierName) updatePayload.courier_name = result.courierName;
+    if (result.pickupScheduledDate) updatePayload.pickup_scheduled_date = result.pickupScheduledDate;
+    if (result.error) console.warn(`[Shiprocket] Partial success for ${order.order_id}: ${result.error}`);
 
-      const { error: dbErr } = await supabase
-        .from('orders')
-        .update(updatePayload)
-        .eq('id', order.id);
+    const { error: dbErr } = await supabase
+      .from('orders')
+      .update(updatePayload)
+      .eq('id', order.id);
 
-      if (dbErr) console.error('[Shiprocket] Failed to save shipment data to DB:', dbErr);
-      else console.log(`[Shiprocket] Shipment data saved for order ${order.order_id} | AWB: ${result.awbCode || 'pending'}`);
-    })
-    .catch((err) => console.error('[Shiprocket] Unexpected pushToShiprocket error:', err));
+    if (dbErr) console.error('[Shiprocket] Failed to save shipment data to DB:', dbErr);
+    else console.log(`[Shiprocket] Shipment data saved for order ${order.order_id} | AWB: ${result.awbCode || 'pending'}`);
+  } catch (err) {
+    console.error('[Shiprocket] Unexpected pushToShiprocket error:', err);
+  }
 };
 
 // Helper: Format Order for Frontend compatibility (renames properties to camelCase)
@@ -718,8 +753,8 @@ router.post('/', optionalAuth, async (c) => {
     triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering COD order email:', err));
     triggerOrderPushNotification(order, 'Order Placed! 🎉', `Thank you! Your Order #${order.order_id} for ₹${order.total} has been received.`, `/account/orders/${order.id}`).catch(() => {});
     decrementStockForOrder(order);
-    // Push to Shiprocket (fire-and-forget)
-    pushToShiprocket(order);
+    // Push to Shiprocket
+    await pushToShiprocket(order);
     // Trigger admin push notification
     sendPushNotification('admin', '🛍️ New COD Order Received!', `Order #${order.order_id} placed for ₹${order.total}`, '/admin/dashboard').catch(() => {});
 
@@ -862,8 +897,8 @@ router.post('/verify-payment', optionalAuth, async (c) => {
       triggerOrderEmail(order, 'confirmed').catch(err => console.error('Error triggering payment-confirmed order email:', err));
       triggerOrderPushNotification(order, 'Payment Confirmed! 💳', `Thank you! Your Order #${order.order_id} for ₹${order.total} payment is confirmed.`, `/account/orders/${order.id}`).catch(() => {});
       decrementStockForOrder(order);
-      // Push to Shiprocket (fire-and-forget — never blocks customer response)
-      pushToShiprocket(order);
+      // Push to Shiprocket
+      await pushToShiprocket(order);
       // Trigger admin push notification
       sendPushNotification('admin', '🛍️ New Online Order Received!', `Order #${order.order_id} payment verified for ₹${order.total}`, '/admin/dashboard').catch(() => {});
 
@@ -1045,12 +1080,18 @@ router.put('/:id/status', authMiddleware, async (c) => {
       // Notify customer
       triggerOrderPushNotification(updatedOrder, statusTitle, statusBody, `/account/orders/${updatedOrder.id}`).catch(() => {});
       
-      // If order is cancelled, cancel Shiprocket shipment too (fire-and-forget)
+      // If order is cancelled, cancel Shiprocket shipment too
       if (isCancelled) {
         const srOrderId = updatedOrder.shiprocket_order_id ? Number(updatedOrder.shiprocket_order_id) : null;
-        cancelShipment(srOrderId)
-          .then((r) => { if (!r.success) console.warn('[Shiprocket] Admin cancel failed:', r.error); })
-          .catch((e) => console.error('[Shiprocket] cancelShipment error:', e));
+        if (srOrderId) {
+          const cancelRes = await cancelShipment(srOrderId);
+          if (cancelRes.success) {
+            await supabase.from('orders').update({ shipment_status: 'cancelled' }).eq('id', orderId);
+            console.log(`[Shiprocket] Order ${orderId} (SR Order ID: ${srOrderId}) cancelled successfully.`);
+          } else {
+            console.warn('[Shiprocket] Admin cancel failed:', cancelRes.error);
+          }
+        }
         sendPushNotification('admin', '❌ Order Cancelled', `Order #${updatedOrder.order_id} has been cancelled.`).catch(() => {});
       }
     }
@@ -1113,11 +1154,17 @@ router.post('/:id/cancel', userAuthMiddleware, async (c) => {
 
     if (updateErr) throw updateErr;
 
-    // Cancel Shiprocket shipment (fire-and-forget — non-blocking)
+    // Cancel Shiprocket shipment (await to ensure completion)
     const srOrderId = order.shiprocket_order_id ? Number(order.shiprocket_order_id) : null;
-    cancelShipment(srOrderId)
-      .then((r) => { if (!r.success) console.warn('[Shiprocket] Customer cancel failed:', r.error); })
-      .catch((e) => console.error('[Shiprocket] cancelShipment error:', e));
+    if (srOrderId) {
+      const cancelRes = await cancelShipment(srOrderId);
+      if (cancelRes.success) {
+        await supabase.from('orders').update({ shipment_status: 'cancelled' }).eq('id', orderId);
+        console.log(`[Shiprocket] Customer cancelled order ${orderId} (SR Order ID: ${srOrderId}).`);
+      } else {
+        console.warn('[Shiprocket] Customer cancel failed in Shiprocket:', cancelRes.error);
+      }
+    }
 
     // Notify customer
     triggerOrderEmail(updatedOrder, 'status_updated', reason || 'Cancelled by customer').catch(() => {});

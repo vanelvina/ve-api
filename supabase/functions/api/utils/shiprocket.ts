@@ -11,10 +11,12 @@
  * All calls are idempotent-safe: errors are returned as Result objects,
  * never thrown, so the caller decides whether to block or log-and-continue.
  */
+import { supabase } from './supabase.ts';
 
 const SHIPROCKET_BASE = 'https://apiv2.shiprocket.in/v1/external';
 const PICKUP_PINCODE = '431001';
-const PICKUP_LOCATION = Deno.env.get('SHIPROCKET_PICKUP_LOCATION') || 'Primary';
+const rawPickupLoc = (Deno.env.get('SHIPROCKET_PICKUP_LOCATION') || 'Home').trim();
+const PICKUP_LOCATION = (rawPickupLoc.includes('Saqeb') || rawPickupLoc.includes('|')) ? 'Home' : rawPickupLoc;
 
 // ─── Auth token cache ──────────────────────────────────────────────────────
 let _token: string | null = null;
@@ -94,13 +96,6 @@ export interface ShiprocketResult {
   error?: string;
 }
 
-export interface TrackingEvent {
-  date: string;
-  activity: string;
-  location: string;
-  status: string;
-}
-
 export interface TrackingResult {
   success: boolean;
   awb?: string;
@@ -109,6 +104,13 @@ export interface TrackingResult {
   deliveryDate?: string | null;
   events: TrackingEvent[];
   error?: string;
+}
+
+export interface TrackingEvent {
+  date: string;
+  activity: string;
+  location: string;
+  status: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -133,14 +135,37 @@ export async function createShipment(order: any): Promise<ShiprocketResult> {
     const { first, last } = buildOrderName(addr);
     const isCod = order.payment_method === 'cod';
 
+    // Resolve customer email (check shipping address, guest info, DB user, or fallback)
+    let email = addr.email || order.guest_info?.email || '';
+    if (!email && order.user_id) {
+      try {
+        const { data: u } = await supabase.from('users').select('email').eq('id', order.user_id).maybeSingle();
+        if (u?.email) email = u.email;
+      } catch {}
+    }
+    if (!email || !email.includes('@')) {
+      email = 'support@vanelvina.com';
+    }
+
+    // Resolve customer phone (ensure valid 10 digits)
+    let rawPhone = String(addr.phone || order.guest_info?.phone || '').replace(/\D/g, '');
+    const phone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '9999999999';
+
+    // Address fields
+    const line1 = (addr.line1 || 'Address').trim();
+    const address1 = line1.length >= 3 ? line1 : `${line1} Street`;
+    const city = (addr.city || 'Aurangabad').trim();
+    const state = (addr.state || 'Maharashtra').trim();
+    const pincode = String(addr.pincode || '431001').replace(/\D/g, '');
+
     // Build order items for Shiprocket
-    const orderItems = (order.items || []).map((item: any) => ({
-      name: item.name || 'Van Elvina Product',
-      sku: item.sku || `SKU-${item.productId || 'NA'}`,
-      units: item.quantity || 1,
-      selling_price: item.price || 0,
-      discount: '',
-      tax: '',
+    const orderItems = (order.items || []).map((item: any, idx: number) => ({
+      name: (item.name || 'Van Elvina Item').slice(0, 100),
+      sku: (item.sku || `VE-ITEM-${idx + 1}`).slice(0, 50),
+      units: Math.max(1, Number(item.quantity) || 1),
+      selling_price: Math.max(1, Number(item.price) || 0),
+      discount: 0,
+      tax: 0,
       hsn: '',
     }));
 
@@ -156,18 +181,17 @@ export async function createShipment(order: any): Promise<ShiprocketResult> {
       pickup_location: PICKUP_LOCATION,
       channel_id: '',
       comment: `Van Elvina order ${order.order_id}`,
-      // Billing = shipping (same for our use case)
       billing_customer_name: first,
       billing_last_name: last,
-      billing_address: addr.line1 || '',
-      billing_address_2: addr.line2 || '',
+      billing_address: address1,
+      billing_address_2: (addr.line2 || '').trim(),
       billing_isd_code: '91',
-      billing_city: addr.city || '',
-      billing_pincode: String(addr.pincode || ''),
-      billing_state: addr.state || '',
+      billing_city: city,
+      billing_pincode: pincode,
+      billing_state: state,
       billing_country: 'India',
-      billing_email: addr.email || order.guest_info?.email || '',
-      billing_phone: String(addr.phone || '').replace(/\D/g, '').slice(-10),
+      billing_email: email,
+      billing_phone: phone,
       shipping_is_billing: true,
       order_items: orderItems,
       payment_method: isCod ? 'COD' : 'Prepaid',
