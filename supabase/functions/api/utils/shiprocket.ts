@@ -3,9 +3,10 @@
  *
  * Handles:
  *  - JWT auth with in-memory caching (10-day tokens, 9-day cache window)
- *  - createShipment()   → Create order + auto-assign AWB + request pickup
- *  - cancelShipment()   → Cancel a Shiprocket order
- *  - trackShipment()    → Get live tracking events by AWB
+ *  - createShipment()        → Create forward order + auto-assign AWB + request pickup
+ *  - createReturnShipment()  → Create reverse pickup from customer → warehouse
+ *  - cancelShipment()        → Cancel a Shiprocket order
+ *  - trackShipment()         → Get live tracking events by AWB
  *
  * Pickup pincode: 431001 (Aurangabad warehouse)
  * All calls are idempotent-safe: errors are returned as Result objects,
@@ -304,6 +305,201 @@ export async function cancelShipment(shiprocketOrderId: number | null | undefine
     return { success: false, error: err?.message };
   }
 }
+
+// ─── Return Shipment Result type ───────────────────────────────────────────
+export interface ReturnShiprocketResult {
+  success: boolean;
+  returnShiprocketOrderId?: number | null;
+  returnShipmentId?: number | null;
+  returnAwbCode?: string | null;
+  returnCourierName?: string | null;
+  returnPickupDate?: string | null;
+  error?: string;
+}
+
+// ─── Warehouse constants (return-to address) ───────────────────────────────
+const WAREHOUSE_NAME_FIRST = 'Van';
+const WAREHOUSE_NAME_LAST = 'Elvina';
+const WAREHOUSE_ADDRESS = 'Aurangabad Warehouse';
+const WAREHOUSE_CITY = 'Aurangabad';
+const WAREHOUSE_STATE = 'Maharashtra';
+const WAREHOUSE_PINCODE = '431001';
+const WAREHOUSE_COUNTRY = 'India';
+const WAREHOUSE_EMAIL = 'support@vanelvina.com';
+const WAREHOUSE_PHONE = '9359999999'; // Van Elvina warehouse contact
+
+// ─── Main: Create Return Shipment (Reverse Pickup) ────────────────────────
+/**
+ * Creates a Shiprocket reverse pickup order from the customer's address
+ * back to the Van Elvina warehouse (Aurangabad).
+ *
+ * Uses POST /orders/create/return with:
+ *   pickup  = customer's shipping_address
+ *   deliver = Van Elvina warehouse (Aurangabad, 431001)
+ *
+ * Follows the same 3-step flow as createShipment():
+ *   1. Create return order
+ *   2. Assign AWB
+ *   3. Request pickup
+ */
+export async function createReturnShipment(order: any): Promise<ReturnShiprocketResult> {
+  try {
+    const addr = order.shipping_address || {};
+    const { first: custFirst, last: custLast } = buildOrderName(addr);
+
+    // Resolve customer email
+    let email = addr.email || order.guest_info?.email || '';
+    if (!email && order.user_id) {
+      try {
+        const { data: u } = await supabase.from('users').select('email').eq('id', order.user_id).maybeSingle();
+        if (u?.email) email = u.email;
+      } catch {}
+    }
+    if (!email || !email.includes('@')) email = WAREHOUSE_EMAIL;
+
+    // Resolve customer phone (ensure 10 digits)
+    const rawPhone = String(addr.phone || order.guest_info?.phone || '').replace(/\D/g, '');
+    const custPhone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '9999999999';
+
+    // Customer pickup address fields
+    const pickupAddress = (addr.line1 || 'Address').trim();
+    const pickupAddress2 = (addr.line2 || '').trim();
+    const pickupCity = (addr.city || 'Aurangabad').trim();
+    const pickupState = (addr.state || 'Maharashtra').trim();
+    const pickupPincode = String(addr.pincode || '431001').replace(/\D/g, '');
+
+    // Build return order items (same as original)
+    const orderItems = (order.items || []).map((item: any, idx: number) => ({
+      name: (item.name || 'Van Elvina Item').slice(0, 100),
+      sku: (item.sku || `VE-ITEM-${idx + 1}`).slice(0, 50),
+      units: Math.max(1, Number(item.quantity) || 1),
+      selling_price: Math.max(1, Number(item.price) || 0),
+      discount: 0,
+      tax: 0,
+      hsn: '',
+    }));
+
+    if (!orderItems.length) {
+      return { success: false, error: 'No items in order for return shipment' };
+    }
+
+    const returnOrderId = `RET-${order.order_id}`;
+    const orderDate = new Date().toISOString().replace('T', ' ').split('.')[0];
+
+    // ── Step 1: Create Shiprocket Return Order ─────────────────────────────
+    const createPayload = {
+      order_id: returnOrderId,
+      order_date: orderDate,
+      channel_id: '',
+      // Pickup from customer's address
+      pickup_customer_name: custFirst,
+      pickup_last_name: custLast,
+      pickup_address: pickupAddress,
+      pickup_address_2: pickupAddress2,
+      pickup_city: pickupCity,
+      pickup_state: pickupState,
+      pickup_country: 'India',
+      pickup_pincode: pickupPincode,
+      pickup_email: email,
+      pickup_phone: custPhone,
+      pickup_isd_code: '91',
+      // Deliver to Van Elvina warehouse
+      shipping_customer_name: WAREHOUSE_NAME_FIRST,
+      shipping_last_name: WAREHOUSE_NAME_LAST,
+      shipping_address: WAREHOUSE_ADDRESS,
+      shipping_address_2: '',
+      shipping_city: WAREHOUSE_CITY,
+      shipping_state: WAREHOUSE_STATE,
+      shipping_country: WAREHOUSE_COUNTRY,
+      shipping_pincode: WAREHOUSE_PINCODE,
+      shipping_email: WAREHOUSE_EMAIL,
+      shipping_phone: WAREHOUSE_PHONE,
+      shipping_isd_code: '91',
+      // Order details
+      payment_method: 'Prepaid',
+      order_items: orderItems,
+      sub_total: order.subtotal || order.total || 0,
+      // Default dimensions for innerwear
+      length: 20,
+      breadth: 15,
+      height: 5,
+      weight: 0.5,
+    };
+
+    console.log(`[Shiprocket] Creating RETURN order for ${order.order_id} (returnId: ${returnOrderId})...`);
+    const created = await shiprocketFetch('/orders/create/return', {
+      method: 'POST',
+      body: JSON.stringify(createPayload),
+    });
+
+    console.log(`[Shiprocket] Return order response for ${order.order_id}:`, JSON.stringify(created));
+
+    if (!created) {
+      return { success: false, error: 'Shiprocket return order creation returned null' };
+    }
+    if (created.status_code && created.status_code !== 1) {
+      return { success: false, error: created.message || JSON.stringify(created) || 'Return order creation failed' };
+    }
+
+    const returnShiprocketOrderId: number = created.order_id;
+    const returnShipmentId: number = created.shipment_id;
+
+    console.log(`[Shiprocket] Return order created: srReturnOrderId=${returnShiprocketOrderId}, shipmentId=${returnShipmentId}`);
+
+    // ── Step 2: Assign AWB ─────────────────────────────────────────────────
+    const awbRes = await shiprocketFetch('/courier/assign/awb', {
+      method: 'POST',
+      body: JSON.stringify({
+        shipment_id: String(returnShipmentId),
+        courier_id: '', // auto-assign
+      }),
+    });
+
+    const returnAwbCode: string | null = awbRes?.response?.data?.awb_code || awbRes?.awb_code || null;
+    const returnCourierName: string | null = awbRes?.response?.data?.courier_name || awbRes?.courier_name || null;
+
+    if (!returnAwbCode) {
+      console.warn(`[Shiprocket] Return AWB assignment failed for shipmentId=${returnShipmentId}:`, awbRes);
+      return {
+        success: true,
+        returnShiprocketOrderId,
+        returnShipmentId,
+        returnAwbCode: null,
+        returnCourierName: null,
+        error: 'Return AWB assignment failed — please assign manually in Shiprocket dashboard',
+      };
+    }
+
+    console.log(`[Shiprocket] Return AWB assigned: ${returnAwbCode} via ${returnCourierName}`);
+
+    // ── Step 3: Request Pickup ─────────────────────────────────────────────
+    const pickupRes = await shiprocketFetch('/courier/generate/pickup', {
+      method: 'POST',
+      body: JSON.stringify({ shipment_id: [returnShipmentId] }),
+    });
+
+    const returnPickupDate: string | null =
+      pickupRes?.pickup_scheduled_date ||
+      pickupRes?.response?.pickup_scheduled_date ||
+      null;
+
+    console.log(`[Shiprocket] Return pickup requested. Scheduled: ${returnPickupDate || 'TBD'}`);
+
+    return {
+      success: true,
+      returnShiprocketOrderId,
+      returnShipmentId,
+      returnAwbCode,
+      returnCourierName,
+      returnPickupDate,
+    };
+  } catch (err: any) {
+    console.error('[Shiprocket] createReturnShipment error:', err?.message || err);
+    return { success: false, error: err?.message || 'Shiprocket return shipment creation failed' };
+  }
+}
+
+
 
 // ─── Track Shipment ────────────────────────────────────────────────────────
 /**

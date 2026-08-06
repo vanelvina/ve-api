@@ -685,8 +685,9 @@ router.post('/:id/return', userAuth, async (req, res) => {
     const deliveredEntry = (order.status_history || []).slice().reverse().find(h => h.status === 'delivered');
     const deliveredDate = deliveredEntry ? deliveredEntry.timestamp : order.updated_at;
     
-    if (Date.now() - new Date(deliveredDate).getTime() > 7 * 24 * 60 * 60 * 1000) {
-      return res.status(400).json({ message: 'Return window (7 days) has expired' });
+    // Return window: 3 days from delivery
+    if (Date.now() - new Date(deliveredDate).getTime() > 3 * 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ message: 'Return window (3 days) has expired' });
     }
 
     const newHistory = [...(order.status_history || [])];
@@ -741,8 +742,9 @@ router.post('/:id/exchange', userAuth, async (req, res) => {
     const deliveredEntry = (order.status_history || []).slice().reverse().find(h => h.status === 'delivered');
     const deliveredDate = deliveredEntry ? deliveredEntry.timestamp : order.updated_at;
     
-    if (Date.now() - new Date(deliveredDate).getTime() > 7 * 24 * 60 * 60 * 1000) {
-      return res.status(400).json({ message: 'Exchange window (7 days) has expired' });
+    // Exchange window: 3 days from delivery
+    if (Date.now() - new Date(deliveredDate).getTime() > 3 * 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ message: 'Exchange window (3 days) has expired' });
     }
 
     const newHistory = [...(order.status_history || [])];

@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import jwt from 'npm:jsonwebtoken';
 import { sendEmail } from '../utils/email.ts';
 import { sendPushNotification } from './inquiries.ts';
-import { createShipment, cancelShipment } from '../utils/shiprocket.ts';
+import { createShipment, cancelShipment, createReturnShipment } from '../utils/shiprocket.ts';
 
 const router = new Hono();
 
@@ -101,13 +101,19 @@ function formatOrderForFrontend(order: any) {
     shippingAddress: order.shipping_address,
     createdAt: order.created_at,
     updatedAt: order.updated_at,
-    // Shiprocket fields
+    // Shiprocket forward shipment fields
     shiprocketOrderId: order.shiprocket_order_id || null,
     shiprocketShipmentId: order.shiprocket_shipment_id || null,
     awbCode: order.awb_code || null,
     courierName: order.courier_name || null,
     shipmentStatus: order.shipment_status || null,
     pickupScheduledDate: order.pickup_scheduled_date || null,
+    // Shiprocket reverse shipment fields (return/exchange)
+    returnAwbCode: order.return_awb_code || null,
+    returnCourierName: order.return_courier_name || null,
+    returnPickupDate: order.return_pickup_date || null,
+    returnShiprocketOrderId: order.return_shiprocket_order_id || null,
+    returnShipmentId: order.return_shipment_id || null,
   };
 }
 
@@ -1221,9 +1227,10 @@ router.post('/:id/return', userAuthMiddleware, async (c) => {
 
     const deliveredEntry = (order.status_history || []).slice().reverse().find((h: any) => h.status === 'delivered');
     const deliveredDate = deliveredEntry ? deliveredEntry.timestamp : order.updated_at;
-    
-    if (Date.now() - new Date(deliveredDate).getTime() > 7 * 24 * 60 * 60 * 1000) {
-      return c.json({ message: 'Return window (7 days) has expired' }, 400);
+
+    // Return window: 3 days from delivery
+    if (Date.now() - new Date(deliveredDate).getTime() > 3 * 24 * 60 * 60 * 1000) {
+      return c.json({ message: 'Return window (3 days) has expired' }, 400);
     }
 
     const newHistory = [...(order.status_history || [])];
@@ -1246,9 +1253,35 @@ router.post('/:id/return', userAuthMiddleware, async (c) => {
 
     if (updateErr) throw updateErr;
 
+    // ── Fire-and-forget: Create Shiprocket reverse pickup ──────────────────
+    const pushReturnToShiprocket = async () => {
+      try {
+        const result = await createReturnShipment(order);
+        if (!result.success && !result.returnShiprocketOrderId) {
+          console.error(`[Shiprocket] Return shipment creation failed for order ${order.order_id}:`, result.error);
+          return;
+        }
+        const updatePayload: any = {};
+        if (result.returnShiprocketOrderId) updatePayload.return_shiprocket_order_id = String(result.returnShiprocketOrderId);
+        if (result.returnShipmentId) updatePayload.return_shipment_id = String(result.returnShipmentId);
+        if (result.returnAwbCode) updatePayload.return_awb_code = result.returnAwbCode;
+        if (result.returnCourierName) updatePayload.return_courier_name = result.returnCourierName;
+        if (result.returnPickupDate) updatePayload.return_pickup_date = result.returnPickupDate;
+        if (result.error) console.warn(`[Shiprocket] Partial return success for ${order.order_id}: ${result.error}`);
+        if (Object.keys(updatePayload).length > 0) {
+          const { error: dbErr } = await supabase.from('orders').update(updatePayload).eq('id', order.id);
+          if (dbErr) console.error('[Shiprocket] Failed to save return shipment data to DB:', dbErr);
+          else console.log(`[Shiprocket] Return shipment data saved for order ${order.order_id} | Return AWB: ${result.returnAwbCode || 'pending'}`);
+        }
+      } catch (err) {
+        console.error('[Shiprocket] Unexpected pushReturnToShiprocket error:', err);
+      }
+    };
+    pushReturnToShiprocket();
+
     triggerOrderEmail(updatedOrder, 'return_requested', reason).catch(err => console.error('Error triggering return requested email:', err));
-    triggerOrderPushNotification(updatedOrder, 'Return Requested ↩️', `Your return request for Order #${updatedOrder.order_id} has been submitted.`, `/account/orders/${updatedOrder.id}`).catch(() => {});
-    sendPushNotification('admin', '↩️ Return Requested', `Order #${updatedOrder.order_id} return requested by customer.`).catch(() => {});
+    triggerOrderPushNotification(updatedOrder, 'Return Requested ↩️', `Your return request for Order #${updatedOrder.order_id} has been submitted. Our courier will contact you for pickup within 2-3 business days.`, `/account/orders/${updatedOrder.id}`).catch(() => {});
+    sendPushNotification('admin', '↩️ Return Requested', `Order #${updatedOrder.order_id} return requested by customer. Reverse pickup scheduled.`).catch(() => {});
 
     return c.json(formatOrderForFrontend(updatedOrder));
   } catch (err) {
@@ -1289,9 +1322,10 @@ router.post('/:id/exchange', userAuthMiddleware, async (c) => {
 
     const deliveredEntry = (order.status_history || []).slice().reverse().find((h: any) => h.status === 'delivered');
     const deliveredDate = deliveredEntry ? deliveredEntry.timestamp : order.updated_at;
-    
-    if (Date.now() - new Date(deliveredDate).getTime() > 7 * 24 * 60 * 60 * 1000) {
-      return c.json({ message: 'Exchange window (7 days) has expired' }, 400);
+
+    // Exchange window: 3 days from delivery
+    if (Date.now() - new Date(deliveredDate).getTime() > 3 * 24 * 60 * 60 * 1000) {
+      return c.json({ message: 'Exchange window (3 days) has expired' }, 400);
     }
 
     const newHistory = [...(order.status_history || [])];
@@ -1314,9 +1348,35 @@ router.post('/:id/exchange', userAuthMiddleware, async (c) => {
 
     if (updateErr) throw updateErr;
 
+    // ── Fire-and-forget: Create Shiprocket reverse pickup for exchange ──────
+    const pushExchangeReturnToShiprocket = async () => {
+      try {
+        const result = await createReturnShipment(order);
+        if (!result.success && !result.returnShiprocketOrderId) {
+          console.error(`[Shiprocket] Exchange return shipment creation failed for order ${order.order_id}:`, result.error);
+          return;
+        }
+        const updatePayload: any = {};
+        if (result.returnShiprocketOrderId) updatePayload.return_shiprocket_order_id = String(result.returnShiprocketOrderId);
+        if (result.returnShipmentId) updatePayload.return_shipment_id = String(result.returnShipmentId);
+        if (result.returnAwbCode) updatePayload.return_awb_code = result.returnAwbCode;
+        if (result.returnCourierName) updatePayload.return_courier_name = result.returnCourierName;
+        if (result.returnPickupDate) updatePayload.return_pickup_date = result.returnPickupDate;
+        if (result.error) console.warn(`[Shiprocket] Partial exchange return success for ${order.order_id}: ${result.error}`);
+        if (Object.keys(updatePayload).length > 0) {
+          const { error: dbErr } = await supabase.from('orders').update(updatePayload).eq('id', order.id);
+          if (dbErr) console.error('[Shiprocket] Failed to save exchange return shipment data to DB:', dbErr);
+          else console.log(`[Shiprocket] Exchange return shipment data saved for order ${order.order_id} | Return AWB: ${result.returnAwbCode || 'pending'}`);
+        }
+      } catch (err) {
+        console.error('[Shiprocket] Unexpected pushExchangeReturnToShiprocket error:', err);
+      }
+    };
+    pushExchangeReturnToShiprocket();
+
     triggerOrderEmail(updatedOrder, 'exchange_requested', reason).catch(err => console.error('Error triggering exchange requested email:', err));
-    triggerOrderPushNotification(updatedOrder, 'Exchange Requested 🔄', `Your exchange request for Order #${updatedOrder.order_id} has been submitted.`, `/account/orders/${updatedOrder.id}`).catch(() => {});
-    sendPushNotification('admin', '🔄 Exchange Requested', `Order #${updatedOrder.order_id} exchange requested by customer.`).catch(() => {});
+    triggerOrderPushNotification(updatedOrder, 'Exchange Requested 🔄', `Your exchange request for Order #${updatedOrder.order_id} has been submitted. Our courier will contact you for pickup within 2-3 business days.`, `/account/orders/${updatedOrder.id}`).catch(() => {});
+    sendPushNotification('admin', '🔄 Exchange Requested', `Order #${updatedOrder.order_id} exchange requested by customer. Reverse pickup scheduled.`).catch(() => {});
 
     return c.json(formatOrderForFrontend(updatedOrder));
   } catch (err) {
