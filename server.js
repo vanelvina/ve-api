@@ -1,4 +1,5 @@
 import express from 'express';
+import chatbotRoutes from './routes/chatbot.js';
 import cors from 'cors';
 import 'dotenv/config';
 import path from 'path';
@@ -30,7 +31,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
+app.use('/api/chatbot', chatbotRoutes);
 // Serve static uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
